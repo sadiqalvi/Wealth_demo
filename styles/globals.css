@@ -1,0 +1,92 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: #0A0A12;
+  color: #EAEAF0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.glass-card {
+  @apply rounded-card border border-rev-border/40;
+  background: rgba(26, 26, 46, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(108, 92, 231, 0.35);
+  border-radius: 999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.phone-container {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.phone-container::-webkit-scrollbar {
+  display: none;
+}
+
+.phone-inner-shell {
+  height: clamp(640px, calc(100vh - 7.5rem), 844px);
+}
+
+.phone-safe-area {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+}
+
+.btn-primary {
+  @apply rounded-full py-3.5 text-sm font-semibold text-white shadow-glow transition;
+  background: linear-gradient(135deg, #6C5CE7, #A29BFE);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #7C6CF7, #B2ABFE);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  transform: none;
+}
+
+.glow-border {
+  box-shadow: 0 0 0 1px rgba(108, 92, 231, 0.4), 0 0 15px rgba(108, 92, 231, 0.15);
+}

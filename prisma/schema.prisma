@@ -1,0 +1,38 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum KycStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  fullName      String
+  cnic          String?
+  phone         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  brokerAccount BrokerAccount?
+}
+
+model BrokerAccount {
+  id                  String     @id @default(cuid())
+  userId              String     @unique
+  user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subAccountId        String     @unique // pyPSX account_id (e.g. acct_...)
+  brokerAccountNumber String?    // BRK-...
+  status              String     @default("ACTIVE")
+  kycStatus           KycStatus  @default(APPROVED)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+}
