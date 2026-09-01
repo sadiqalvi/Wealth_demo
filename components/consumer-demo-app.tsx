@@ -1395,6 +1395,57 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                     </div>
                   )}
                 </div>
+
+                {/* ORDER LOG INSIDE PORTFOLIO */}
+                <div className="p-6 rounded-2xl bg-[#0D0D1A] border border-slate-800 shadow-xl space-y-4">
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-indigo-400" /> Executed & Pending Orders
+                  </h2>
+                  {(ordersData?.orders || []).length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-slate-400 font-mono">
+                            <th className="pb-3 font-semibold">Order ID</th>
+                            <th className="pb-3 font-semibold">Time</th>
+                            <th className="pb-3 font-semibold">Symbol</th>
+                            <th className="pb-3 font-semibold">Side</th>
+                            <th className="pb-3 font-semibold">Type</th>
+                            <th className="pb-3 font-semibold">Qty</th>
+                            <th className="pb-3 font-semibold">Fill / Limit</th>
+                            <th className="pb-3 font-semibold">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 font-mono">
+                          {ordersData?.orders.map((ord) => (
+                            <tr key={ord.order_id} className="hover:bg-slate-900/40 transition">
+                              <td className="py-3 text-slate-400 font-mono">{ord.order_id.substring(0, 10)}...</td>
+                              <td className="py-3 text-slate-400">{new Date(ord.created_at).toLocaleTimeString()}</td>
+                              <td className="py-3 font-bold text-white">{ord.symbol}</td>
+                              <td className="py-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ord.side === "BUY" ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"}`}>
+                                  {ord.side}
+                                </span>
+                              </td>
+                              <td className="py-3 text-slate-300">{ord.order_type}</td>
+                              <td className="py-3">{ord.quantity}</td>
+                              <td className="py-3 text-white">PKR {(ord.avg_fill_price || ord.price || 0).toFixed(2)}</td>
+                              <td className="py-3">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400">
+                                  {ord.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="py-12 text-center text-slate-500 text-xs">
+                      No orders executed yet.
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

@@ -2,8 +2,8 @@ const { PrismaClient } = require("@prisma/client");
 const db = new PrismaClient();
 
 const PYPSX_BASE_URL = process.env.PYPSX_BASE_URL || "http://localhost:8080";
-const PYPSX_KEY_ID = process.env.PYPSX_ORG_API_KEY_ID || "PYPSX-SANDBOX-PYPSXDEMO-32C246826816";
-const PYPSX_SECRET_KEY = process.env.PYPSX_ORG_API_SECRET_KEY || "0aiUwmkQKdaOl6YDI73tFwZBEcAYZhL-hAsj17lr-xY";
+const PYPSX_KEY_ID = process.env.PYPSX_ORG_API_KEY_ID || "PYPSX-SANDBOX-PYPSXOFFICIA-FEEB9F782AAB";
+const PYPSX_SECRET_KEY = process.env.PYPSX_ORG_API_SECRET_KEY || "dUndXXS2_xa8jMglxLO1R9GEEX5FjHbrhlUCJUaOBLw";
 
 async function pypsxFetch(endpoint, options = {}) {
   const url = `${PYPSX_BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;

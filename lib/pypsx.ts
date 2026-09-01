@@ -1,6 +1,6 @@
 const PYPSX_BASE_URL = process.env.PYPSX_BASE_URL || "http://localhost:8080";
-const PYPSX_KEY_ID = process.env.PYPSX_ORG_API_KEY_ID || "PYPSX-SANDBOX-PYPSXDEMO-81E62EE10FC9";
-const PYPSX_SECRET_KEY = process.env.PYPSX_ORG_API_SECRET_KEY || "qlyX4Dqv7T1Xudp6xmOpVjZc41tgNjFF-wLLZb_qx6k";
+const PYPSX_KEY_ID = process.env.PYPSX_ORG_API_KEY_ID || "PYPSX-SANDBOX-PYPSXOFFICIA-FEEB9F782AAB";
+const PYPSX_SECRET_KEY = process.env.PYPSX_ORG_API_SECRET_KEY || "dUndXXS2_xa8jMglxLO1R9GEEX5FjHbrhlUCJUaOBLw";
 
 export async function pypsxFetch<T = any>(
   endpoint: string,
