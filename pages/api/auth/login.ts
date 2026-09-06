@@ -44,6 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       user: {
         id: user.id,
+        userNumber: user.userNumber,
         email: user.email,
         fullName: user.fullName,
         cnic: user.cnic,

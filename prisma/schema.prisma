@@ -15,6 +15,7 @@ enum KycStatus {
 
 model User {
   id            String         @id @default(cuid())
+  userNumber    Int            @unique @default(autoincrement())
   email         String         @unique
   passwordHash  String
   fullName      String

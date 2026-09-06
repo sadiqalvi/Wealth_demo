@@ -28,7 +28,7 @@ export async function ensureBrokerAccountForUser(user: {
     const pypsxRes = await pypsxFetch<PyPsxSubAccount>("/v1/partner-api/accounts", {
       method: "POST",
       body: JSON.stringify({
-        full_name: `${user.fullName} ${user.id.substring(0, 6)}`,
+        full_name: user.fullName,
         email: user.email,
         cnic: cnicToUse,
       }),
@@ -52,26 +52,10 @@ export async function ensureBrokerAccountForUser(user: {
         brokerAccountNumber = matched.broker_account_number || `BRK-${subAccountId!.substring(0, 8)}`;
         status = matched.status || "ACTIVE";
       } else {
-        // Fallback: create with a unique email alias
-        const aliasEmail = user.email.includes("@")
-          ? user.email.replace("@", `+${user.id.substring(0, 6)}@`)
-          : `${user.id.substring(0, 8)}@sandbox.pk`;
-
-        const fallbackRes = await pypsxFetch<PyPsxSubAccount>("/v1/partner-api/accounts", {
-          method: "POST",
-          body: JSON.stringify({
-            full_name: `${user.fullName} ${user.id.substring(0, 6)}`,
-            email: aliasEmail,
-            cnic: cnicToUse,
-          }),
-        });
-
-        subAccountId = fallbackRes.sub_account_id || fallbackRes.account_id;
-        brokerAccountNumber = fallbackRes.broker_account_number || `BRK-${subAccountId.substring(0, 8)}`;
-        status = fallbackRes.status || "ACTIVE";
+        throw createErr;
       }
     } catch (lookupErr) {
-      console.error("Failed fallback lookup for sub-account:", lookupErr);
+      console.error("Failed lookup for existing sub-account:", lookupErr);
       throw createErr;
     }
   }

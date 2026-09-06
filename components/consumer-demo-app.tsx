@@ -74,6 +74,9 @@ interface OrderRecord {
   side: "BUY" | "SELL";
   quantity: number;
   price?: number;
+  stop_price?: number;
+  stop_loss_price?: number;
+  take_profit_price?: number;
   order_type: string;
   order_class?: string;
   status: string;
@@ -114,6 +117,7 @@ interface PyPsxBrokerConfig {
 
 interface UserSession {
   id: string;
+  userNumber?: number;
   email: string;
   fullName: string;
   cnic?: string;
@@ -127,7 +131,7 @@ interface UserSession {
   };
 }
 
-type OrderType = "MARKET" | "LIMIT" | "STOP_LOSS" | "STOP_LIMIT" | "OCO" | "BRACKET";
+type OrderType = "MARKET" | "LIMIT" | "STOP_LOSS" | "STOP_LIMIT" | "TAKE_PROFIT" | "OCO" | "BRACKET";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -353,9 +357,24 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
     if (orderType === "MARKET") {
       return tradeSide === "BUY" ? topAskPrice : topBidPrice;
     }
-    const parsedLimit = parseFloat(limitPrice);
-    return !isNaN(parsedLimit) && parsedLimit > 0 ? parsedLimit : liveStockPrice;
-  }, [selectedStock, orderType, tradeSide, limitPrice, topAskPrice, topBidPrice, liveStockPrice]);
+    if (["LIMIT", "BRACKET"].includes(orderType)) {
+      const parsedLimit = parseFloat(limitPrice);
+      return !isNaN(parsedLimit) && parsedLimit > 0 ? parsedLimit : liveStockPrice;
+    }
+    if (["STOP_LOSS", "STOP_LIMIT"].includes(orderType)) {
+      const parsedStop = parseFloat(stopPrice);
+      return !isNaN(parsedStop) && parsedStop > 0 ? parsedStop : liveStockPrice;
+    }
+    if (orderType === "TAKE_PROFIT") {
+      const parsedTp = parseFloat(takeProfitPrice || stopPrice);
+      return !isNaN(parsedTp) && parsedTp > 0 ? parsedTp : liveStockPrice;
+    }
+    if (orderType === "OCO") {
+      const parsedTp = parseFloat(takeProfitPrice);
+      return !isNaN(parsedTp) && parsedTp > 0 ? parsedTp : liveStockPrice;
+    }
+    return liveStockPrice;
+  }, [selectedStock, orderType, tradeSide, limitPrice, stopPrice, takeProfitPrice, topAskPrice, topBidPrice, liveStockPrice]);
 
   const grossNotional = useMemo(() => {
     return Number((estExecutionPrice * (tradeQty || 0)).toFixed(2));
@@ -477,6 +496,8 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
         pypsxOrderType = "STOP_LOSS";
       } else if (orderType === "STOP_LIMIT") {
         pypsxOrderType = "STOP_LIMIT";
+      } else if (orderType === "TAKE_PROFIT") {
+        pypsxOrderType = "TAKE_PROFIT";
       } else if (orderType === "OCO") {
         pypsxOrderType = "LIMIT";
         pypsxOrderClass = "OCO";
@@ -491,18 +512,25 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
         quantity: tradeQty,
         order_type: pypsxOrderType,
         order_class: pypsxOrderClass,
-        price: estExecutionPrice,
       };
 
-      if (["LIMIT", "STOP_LIMIT", "OCO", "BRACKET"].includes(orderType) && limitPrice) {
-        payload.price = parseFloat(limitPrice);
-      }
-      if (["STOP_LOSS", "STOP_LIMIT"].includes(orderType) && stopPrice) {
-        payload.stop_price = parseFloat(stopPrice);
-      }
-      if (["OCO", "BRACKET"].includes(orderType)) {
-        if (stopLossPrice) payload.stop_loss_price = parseFloat(stopLossPrice);
-        if (takeProfitPrice) payload.take_profit_price = parseFloat(takeProfitPrice);
+      if (orderType === "LIMIT") {
+        payload.price = parseFloat(limitPrice) || liveStockPrice;
+      } else if (orderType === "STOP_LOSS") {
+        payload.stop_price = parseFloat(stopPrice) || liveStockPrice;
+      } else if (orderType === "STOP_LIMIT") {
+        payload.stop_price = parseFloat(stopPrice) || liveStockPrice;
+        payload.price = parseFloat(limitPrice) || liveStockPrice;
+      } else if (orderType === "TAKE_PROFIT") {
+        payload.stop_price = parseFloat(takeProfitPrice || stopPrice) || liveStockPrice;
+      } else if (orderType === "BRACKET") {
+        payload.price = parseFloat(limitPrice) || liveStockPrice;
+        payload.stop_loss_price = parseFloat(stopLossPrice);
+        payload.take_profit_price = parseFloat(takeProfitPrice);
+      } else if (orderType === "OCO") {
+        if (limitPrice) payload.price = parseFloat(limitPrice);
+        payload.stop_loss_price = parseFloat(stopLossPrice);
+        payload.take_profit_price = parseFloat(takeProfitPrice);
       }
 
       const res = await fetch("/api/orders", {
@@ -580,6 +608,11 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                 <div className="hidden sm:flex flex-col items-end text-right">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-semibold text-slate-200">{currentUser.fullName}</span>
+                    {currentUser.userNumber && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                        #{currentUser.userNumber}
+                      </span>
+                    )}
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   </div>
                   <span className="text-[11px] font-mono text-indigo-400">
@@ -880,8 +913,8 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                     <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">
                       Order Type
                     </label>
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                      {(["MARKET", "LIMIT", "STOP_LOSS", "STOP_LIMIT", "OCO", "BRACKET"] as OrderType[]).map((type) => (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5">
+                      {(["MARKET", "LIMIT", "STOP_LOSS", "STOP_LIMIT", "TAKE_PROFIT", "OCO", "BRACKET"] as OrderType[]).map((type) => (
                         <button
                           key={type}
                           onClick={() => setOrderType(type)}
@@ -947,9 +980,11 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                     </div>
 
                     {/* Limit Price Input */}
-                    {["LIMIT", "STOP_LIMIT", "OCO", "BRACKET"].includes(orderType) && (
+                    {["LIMIT", "STOP_LIMIT", "BRACKET"].includes(orderType) && (
                       <div>
-                        <label className="text-xs font-semibold text-slate-300 block mb-1.5">Limit Price (PKR)</label>
+                        <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                          {orderType === "BRACKET" ? "Entry Limit Price (PKR)" : "Limit Price (PKR)"}
+                        </label>
                         <input
                           type="number"
                           step="0.01"
@@ -976,6 +1011,21 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                       </div>
                     )}
 
+                    {/* Take Profit Target (TAKE_PROFIT, OCO, BRACKET) */}
+                    {["TAKE_PROFIT", "OCO", "BRACKET"].includes(orderType) && (
+                      <div>
+                        <label className="text-xs font-semibold text-emerald-300 block mb-1.5">Take Profit Target (PKR)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={takeProfitPrice}
+                          onChange={(e) => setTakeProfitPrice(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-emerald-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white font-mono text-sm outline-none transition"
+                          placeholder="e.g. 360.00"
+                        />
+                      </div>
+                    )}
+
                     {/* Stop Loss Target (OCO / BRACKET) */}
                     {["OCO", "BRACKET"].includes(orderType) && (
                       <div>
@@ -985,23 +1035,8 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                           step="0.01"
                           value={stopLossPrice}
                           onChange={(e) => setStopLossPrice(e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-800 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 text-white font-mono text-sm outline-none transition"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-rose-500 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 text-white font-mono text-sm outline-none transition"
                           placeholder="e.g. 310.00"
-                        />
-                      </div>
-                    )}
-
-                    {/* Take Profit Target (OCO / BRACKET) */}
-                    {["OCO", "BRACKET"].includes(orderType) && (
-                      <div>
-                        <label className="text-xs font-semibold text-emerald-300 block mb-1.5">Take Profit Target (PKR)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={takeProfitPrice}
-                          onChange={(e) => setTakeProfitPrice(e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white font-mono text-sm outline-none transition"
-                          placeholder="e.g. 360.00"
                         />
                       </div>
                     )}
@@ -1410,9 +1445,9 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                             <th className="pb-3 font-semibold">Time</th>
                             <th className="pb-3 font-semibold">Symbol</th>
                             <th className="pb-3 font-semibold">Side</th>
-                            <th className="pb-3 font-semibold">Type</th>
+                            <th className="pb-3 font-semibold">Type / Class</th>
                             <th className="pb-3 font-semibold">Qty</th>
-                            <th className="pb-3 font-semibold">Fill / Limit</th>
+                            <th className="pb-3 font-semibold">Price / Targets</th>
                             <th className="pb-3 font-semibold">Status</th>
                           </tr>
                         </thead>
@@ -1427,11 +1462,38 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                                   {ord.side}
                                 </span>
                               </td>
-                              <td className="py-3 text-slate-300">{ord.order_type}</td>
+                              <td className="py-3 text-slate-300">
+                                <div>{ord.order_type}</div>
+                                {ord.order_class && ord.order_class !== "SIMPLE" && (
+                                  <span className="text-[10px] text-indigo-400 font-semibold">{ord.order_class}</span>
+                                )}
+                              </td>
                               <td className="py-3">{ord.quantity}</td>
-                              <td className="py-3 text-white">PKR {(ord.avg_fill_price || ord.price || 0).toFixed(2)}</td>
+                              <td className="py-3 text-slate-200">
+                                {ord.avg_fill_price ? (
+                                  <span className="text-emerald-400 font-bold">Fill: PKR {ord.avg_fill_price.toFixed(2)}</span>
+                                ) : ord.price ? (
+                                  <span>Lmt: PKR {ord.price.toFixed(2)}</span>
+                                ) : ord.stop_price ? (
+                                  <span className="text-amber-400">Stop: PKR {ord.stop_price.toFixed(2)}</span>
+                                ) : (
+                                  <span>Market</span>
+                                )}
+                                {(ord.stop_loss_price || ord.take_profit_price) && (
+                                  <div className="text-[10px] text-slate-400">
+                                    {ord.stop_loss_price && <span className="text-rose-400 mr-2">SL: {ord.stop_loss_price}</span>}
+                                    {ord.take_profit_price && <span className="text-emerald-400">TP: {ord.take_profit_price}</span>}
+                                  </div>
+                                )}
+                              </td>
                               <td className="py-3">
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  ord.status === "FILLED"
+                                    ? "bg-emerald-500/10 text-emerald-400"
+                                    : ord.status === "PENDING"
+                                    ? "bg-amber-500/10 text-amber-400"
+                                    : "bg-indigo-500/10 text-indigo-400"
+                                }`}>
                                   {ord.status}
                                 </span>
                               </td>
@@ -1464,9 +1526,9 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                           <th className="pb-3 font-semibold">Time</th>
                           <th className="pb-3 font-semibold">Symbol</th>
                           <th className="pb-3 font-semibold">Side</th>
-                          <th className="pb-3 font-semibold">Type</th>
+                          <th className="pb-3 font-semibold">Type / Class</th>
                           <th className="pb-3 font-semibold">Qty</th>
-                          <th className="pb-3 font-semibold">Fill / Limit</th>
+                          <th className="pb-3 font-semibold">Price / Targets</th>
                           <th className="pb-3 font-semibold">Status</th>
                         </tr>
                       </thead>
@@ -1481,11 +1543,38 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                                 {ord.side}
                               </span>
                             </td>
-                            <td className="py-3 text-slate-300">{ord.order_type}</td>
+                            <td className="py-3 text-slate-300">
+                              <div>{ord.order_type}</div>
+                              {ord.order_class && ord.order_class !== "SIMPLE" && (
+                                <span className="text-[10px] text-indigo-400 font-semibold">{ord.order_class}</span>
+                              )}
+                            </td>
                             <td className="py-3">{ord.quantity}</td>
-                            <td className="py-3 text-white">PKR {(ord.avg_fill_price || ord.price || 0).toFixed(2)}</td>
+                            <td className="py-3 text-slate-200">
+                              {ord.avg_fill_price ? (
+                                <span className="text-emerald-400 font-bold">Fill: PKR {ord.avg_fill_price.toFixed(2)}</span>
+                              ) : ord.price ? (
+                                <span>Lmt: PKR {ord.price.toFixed(2)}</span>
+                              ) : ord.stop_price ? (
+                                <span className="text-amber-400">Stop: PKR {ord.stop_price.toFixed(2)}</span>
+                              ) : (
+                                <span>Market</span>
+                              )}
+                              {(ord.stop_loss_price || ord.take_profit_price) && (
+                                <div className="text-[10px] text-slate-400">
+                                  {ord.stop_loss_price && <span className="text-rose-400 mr-2">SL: {ord.stop_loss_price}</span>}
+                                  {ord.take_profit_price && <span className="text-emerald-400">TP: {ord.take_profit_price}</span>}
+                                </div>
+                              )}
+                            </td>
                             <td className="py-3">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                ord.status === "FILLED"
+                                  ? "bg-emerald-500/10 text-emerald-400"
+                                  : ord.status === "PENDING"
+                                  ? "bg-amber-500/10 text-amber-400"
+                                  : "bg-indigo-500/10 text-indigo-400"
+                              }`}>
                                 {ord.status}
                               </span>
                             </td>

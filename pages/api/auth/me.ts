@@ -17,6 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       where: { id: auth.userId },
       select: {
         id: true,
+        userNumber: true,
         email: true,
         fullName: true,
         cnic: true,

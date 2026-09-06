@@ -64,15 +64,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         `/v1/partner-api/accounts/${subAccountId}/portfolio`
       ).catch(() => null);
 
-      let executionPrice = Number(price);
-      if (!executionPrice || isNaN(executionPrice)) {
-        const qRes = await pypsxFetch<any>(`/v1/partner-api/market/quote/${cleanSymbol}`).catch(() => null);
-        executionPrice = side === "BUY"
-          ? (qRes?.ask || qRes?.last || qRes?.price || 150)
-          : (qRes?.bid || qRes?.last || qRes?.price || 150);
+      // Determine benchmark execution / trigger price for margin estimation
+      let benchmarkPrice = Number(price);
+      if (!benchmarkPrice || isNaN(benchmarkPrice)) {
+        if (stop_price && !isNaN(Number(stop_price))) {
+          benchmarkPrice = Number(stop_price);
+        } else if (take_profit_price && !isNaN(Number(take_profit_price))) {
+          benchmarkPrice = Number(take_profit_price);
+        } else {
+          const qRes = await pypsxFetch<any>(`/v1/partner-api/market/quote/${cleanSymbol}`).catch(() => null);
+          benchmarkPrice = side === "BUY"
+            ? (qRes?.ask || qRes?.last || qRes?.price || 150)
+            : (qRes?.bid || qRes?.last || qRes?.price || 150);
+        }
       }
 
-      const grossNotional = Number((executionPrice * qty).toFixed(2));
+      const grossNotional = Number((benchmarkPrice * qty).toFixed(2));
       const brokerConfig = await getPypsxConfig();
       const commissionRate = (brokerConfig?.commission_rate !== undefined ? brokerConfig.commission_rate : 0.55) / 100;
       const commissionFee = Number((grossNotional * commissionRate).toFixed(2));
@@ -102,7 +109,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           });
         }
 
-        const avgPrice = currentPos?.avg_price || executionPrice;
+        const avgPrice = currentPos?.avg_price || benchmarkPrice;
         const costBasis = avgPrice * qty;
         realizedGain = Number((grossNotional - costBasis).toFixed(2));
         if (realizedGain > 0) {
@@ -110,27 +117,56 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
-      // Build pyPSX Partner API order payload
+      // Build strictly compliant pyPSX Partner API order payload
+      const normalizedOrderType = String(order_type).toUpperCase();
+      const normalizedOrderClass = String(order_class).toUpperCase();
+
       const orderPayload: Record<string, any> = {
         sub_account_id: subAccountId,
         symbol: cleanSymbol,
         side,
         quantity: qty,
-        order_type,
-        order_class,
+        order_type: normalizedOrderType,
+        order_class: normalizedOrderClass,
       };
 
-      if (price !== undefined && price !== null && !isNaN(Number(price))) {
+      if (normalizedOrderType === "LIMIT") {
+        if (price === undefined || price === null || isNaN(Number(price))) {
+          return res.status(422).json({ error: "Missing Limit Price", message: "Limit price is required for LIMIT orders." });
+        }
         orderPayload.price = Number(price);
-      }
-      if (stop_price !== undefined && stop_price !== null && !isNaN(Number(stop_price))) {
+      } else if (normalizedOrderType === "STOP_LOSS" || normalizedOrderType === "STOP") {
+        const trigger = stop_price || price;
+        if (!trigger || isNaN(Number(trigger))) {
+          return res.status(422).json({ error: "Missing Stop Price", message: "Stop price is required for STOP LOSS orders." });
+        }
+        orderPayload.stop_price = Number(trigger);
+      } else if (normalizedOrderType === "STOP_LIMIT") {
+        if (!stop_price || isNaN(Number(stop_price)) || !price || isNaN(Number(price))) {
+          return res.status(422).json({ error: "Missing Parameters", message: "Both stop_price and price are required for STOP LIMIT orders." });
+        }
         orderPayload.stop_price = Number(stop_price);
+        orderPayload.price = Number(price);
+      } else if (normalizedOrderType === "TAKE_PROFIT") {
+        const trigger = stop_price || take_profit_price || price;
+        if (!trigger || isNaN(Number(trigger))) {
+          return res.status(422).json({ error: "Missing Target Price", message: "Target price is required for TAKE PROFIT orders." });
+        }
+        orderPayload.stop_price = Number(trigger);
       }
-      if (stop_loss_price !== undefined && stop_loss_price !== null && !isNaN(Number(stop_loss_price))) {
+
+      if (normalizedOrderClass === "BRACKET" || normalizedOrderClass === "OCO") {
+        if (!stop_loss_price || isNaN(Number(stop_loss_price))) {
+          return res.status(422).json({ error: "Missing Stop Loss Price", message: "stop_loss_price is required for BRACKET/OCO orders." });
+        }
+        if (!take_profit_price || isNaN(Number(take_profit_price))) {
+          return res.status(422).json({ error: "Missing Take Profit Price", message: "take_profit_price is required for BRACKET/OCO orders." });
+        }
         orderPayload.stop_loss_price = Number(stop_loss_price);
-      }
-      if (take_profit_price !== undefined && take_profit_price !== null && !isNaN(Number(take_profit_price))) {
         orderPayload.take_profit_price = Number(take_profit_price);
+        if (price !== undefined && price !== null && !isNaN(Number(price))) {
+          orderPayload.price = Number(price);
+        }
       }
 
       const orderResult = await pypsxFetch<PyPsxOrderResponse>(
