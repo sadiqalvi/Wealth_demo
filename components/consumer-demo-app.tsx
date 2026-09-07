@@ -499,7 +499,7 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
       } else if (orderType === "TAKE_PROFIT") {
         pypsxOrderType = "TAKE_PROFIT";
       } else if (orderType === "OCO") {
-        pypsxOrderType = "LIMIT";
+        pypsxOrderType = limitPrice ? "LIMIT" : "MARKET";
         pypsxOrderClass = "OCO";
       } else if (orderType === "BRACKET") {
         pypsxOrderType = "LIMIT";
@@ -517,20 +517,20 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
       if (orderType === "LIMIT") {
         payload.price = parseFloat(limitPrice) || liveStockPrice;
       } else if (orderType === "STOP_LOSS") {
-        payload.stop_price = parseFloat(stopPrice) || liveStockPrice;
+        payload.stop_price = parseFloat(stopPrice) || (liveStockPrice * 0.95);
       } else if (orderType === "STOP_LIMIT") {
-        payload.stop_price = parseFloat(stopPrice) || liveStockPrice;
+        payload.stop_price = parseFloat(stopPrice) || (liveStockPrice * 0.95);
         payload.price = parseFloat(limitPrice) || liveStockPrice;
       } else if (orderType === "TAKE_PROFIT") {
-        payload.stop_price = parseFloat(takeProfitPrice || stopPrice) || liveStockPrice;
+        payload.stop_price = parseFloat(takeProfitPrice || stopPrice) || (liveStockPrice * 1.1);
       } else if (orderType === "BRACKET") {
         payload.price = parseFloat(limitPrice) || liveStockPrice;
-        payload.stop_loss_price = parseFloat(stopLossPrice);
-        payload.take_profit_price = parseFloat(takeProfitPrice);
+        payload.stop_loss_price = parseFloat(stopLossPrice) || Number((liveStockPrice * 0.95).toFixed(2));
+        payload.take_profit_price = parseFloat(takeProfitPrice) || Number((liveStockPrice * 1.1).toFixed(2));
       } else if (orderType === "OCO") {
         if (limitPrice) payload.price = parseFloat(limitPrice);
-        payload.stop_loss_price = parseFloat(stopLossPrice);
-        payload.take_profit_price = parseFloat(takeProfitPrice);
+        payload.stop_loss_price = parseFloat(stopLossPrice) || Number((liveStockPrice * 0.95).toFixed(2));
+        payload.take_profit_price = parseFloat(takeProfitPrice) || Number((liveStockPrice * 1.1).toFixed(2));
       }
 
       const res = await fetch("/api/orders", {

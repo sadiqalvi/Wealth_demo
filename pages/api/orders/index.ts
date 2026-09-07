@@ -23,8 +23,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "GET") {
     try {
       const ordersRes = await pypsxFetch<{ orders?: any[] } | any[]>(
-        `/v1/partner-api/orders?sub_account_id=${subAccountId}`
-      ).catch(() => ({ orders: [] }));
+        `/v1/partner-api/accounts/${subAccountId}/orders?limit=100`
+      ).catch(async () => {
+        return await pypsxFetch<{ orders?: any[] } | any[]>(
+          `/v1/partner-api/orders?sub_account_id=${subAccountId}`
+        ).catch(() => ({ orders: [] }));
+      });
 
       const orders = Array.isArray(ordersRes) ? ordersRes : ordersRes?.orders || [];
       return res.status(200).json({ orders });
@@ -105,7 +109,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (qty > ownedQty) {
           return res.status(422).json({
             error: "Insufficient Shares",
-            message: `Attempting to sell ${qty} shares, but only ${ownedQty} shares are owned in portfolio.`,
+            message: `Attempting to sell ${qty} shares, but only ${ownedQty} shares are owned in portfolio. Please buy shares first before placing sell or stop-loss exit orders.`,
           });
         }
 
@@ -130,7 +134,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         order_class: normalizedOrderClass,
       };
 
-      if (normalizedOrderType === "LIMIT") {
+      if (normalizedOrderClass === "BRACKET") {
+        if (!stop_loss_price || isNaN(Number(stop_loss_price))) {
+          return res.status(422).json({ error: "Missing Stop Loss Price", message: "stop_loss_price is required for BRACKET orders." });
+        }
+        if (!take_profit_price || isNaN(Number(take_profit_price))) {
+          return res.status(422).json({ error: "Missing Take Profit Price", message: "take_profit_price is required for BRACKET orders." });
+        }
+        if (price === undefined || price === null || isNaN(Number(price))) {
+          return res.status(422).json({ error: "Missing Limit Price", message: "Entry limit price is required for BRACKET orders." });
+        }
+        orderPayload.order_type = "LIMIT";
+        orderPayload.order_class = "BRACKET";
+        orderPayload.price = Number(price);
+        orderPayload.stop_loss_price = Number(stop_loss_price);
+        orderPayload.take_profit_price = Number(take_profit_price);
+      } else if (normalizedOrderClass === "OCO") {
+        if (!stop_loss_price || isNaN(Number(stop_loss_price))) {
+          return res.status(422).json({ error: "Missing Stop Loss Price", message: "stop_loss_price is required for OCO orders." });
+        }
+        if (!take_profit_price || isNaN(Number(take_profit_price))) {
+          return res.status(422).json({ error: "Missing Take Profit Price", message: "take_profit_price is required for OCO orders." });
+        }
+        orderPayload.order_class = "OCO";
+        orderPayload.order_type = (price !== undefined && price !== null && !isNaN(Number(price))) ? "LIMIT" : "MARKET";
+        if (price !== undefined && price !== null && !isNaN(Number(price))) {
+          orderPayload.price = Number(price);
+        }
+        orderPayload.stop_loss_price = Number(stop_loss_price);
+        orderPayload.take_profit_price = Number(take_profit_price);
+      } else if (normalizedOrderType === "LIMIT") {
         if (price === undefined || price === null || isNaN(Number(price))) {
           return res.status(422).json({ error: "Missing Limit Price", message: "Limit price is required for LIMIT orders." });
         }
@@ -141,6 +174,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return res.status(422).json({ error: "Missing Stop Price", message: "Stop price is required for STOP LOSS orders." });
         }
         orderPayload.stop_price = Number(trigger);
+        delete orderPayload.price;
       } else if (normalizedOrderType === "STOP_LIMIT") {
         if (!stop_price || isNaN(Number(stop_price)) || !price || isNaN(Number(price))) {
           return res.status(422).json({ error: "Missing Parameters", message: "Both stop_price and price are required for STOP LIMIT orders." });
@@ -153,20 +187,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return res.status(422).json({ error: "Missing Target Price", message: "Target price is required for TAKE PROFIT orders." });
         }
         orderPayload.stop_price = Number(trigger);
-      }
-
-      if (normalizedOrderClass === "BRACKET" || normalizedOrderClass === "OCO") {
-        if (!stop_loss_price || isNaN(Number(stop_loss_price))) {
-          return res.status(422).json({ error: "Missing Stop Loss Price", message: "stop_loss_price is required for BRACKET/OCO orders." });
-        }
-        if (!take_profit_price || isNaN(Number(take_profit_price))) {
-          return res.status(422).json({ error: "Missing Take Profit Price", message: "take_profit_price is required for BRACKET/OCO orders." });
-        }
-        orderPayload.stop_loss_price = Number(stop_loss_price);
-        orderPayload.take_profit_price = Number(take_profit_price);
-        if (price !== undefined && price !== null && !isNaN(Number(price))) {
-          orderPayload.price = Number(price);
-        }
+        delete orderPayload.price;
+      } else if (normalizedOrderType === "MARKET") {
+        delete orderPayload.price;
+        delete orderPayload.stop_price;
+        delete orderPayload.stop_loss_price;
+        delete orderPayload.take_profit_price;
       }
 
       const orderResult = await pypsxFetch<PyPsxOrderResponse>(
