@@ -1,6 +1,6 @@
 const PYPSX_BASE_URL = process.env.PYPSX_BASE_URL || "http://localhost:8080";
-const PYPSX_KEY_ID = process.env.PYPSX_ORG_API_KEY_ID || "PYPSX-SANDBOX-PYPSXOFFICIA-FEEB9F782AAB";
-const PYPSX_SECRET_KEY = process.env.PYPSX_ORG_API_SECRET_KEY || "dUndXXS2_xa8jMglxLO1R9GEEX5FjHbrhlUCJUaOBLw";
+const PYPSX_KEY_ID = process.env.PYPSX_ORG_API_KEY_ID || "PYPSX-SANDBOX-WEALTH-21F957D2D5D8";
+const PYPSX_SECRET_KEY = process.env.PYPSX_ORG_API_SECRET_KEY || "52_NZhD4NOW7IeDYDTJHWkfPnr9ye6gldeJLuD1TaQc";
 
 export async function pypsxFetch<T = any>(
   endpoint: string,
@@ -25,10 +25,12 @@ export async function pypsxFetch<T = any>(
     const errorMsg =
       data?.detail?.[0]?.msg ||
       data?.detail ||
+      data?.message ||
       data?.error ||
       `pyPSX request failed with status ${response.status}`;
     const error = new Error(typeof errorMsg === "string" ? errorMsg : JSON.stringify(errorMsg));
     (error as any).status = response.status;
+    (error as any).code = data?.code;
     (error as any).data = data;
     throw error;
   }
@@ -66,6 +68,9 @@ export interface PyPsxOrderResponse {
   avg_fill_price?: number;
   notional?: number;
   commission?: number;
+  fees?: Array<{ name: string; amount: number }>;
+  fees_total?: number;
+  fill_source?: string;
   cash_balance?: number;
   equity?: number;
   created_at: string;
@@ -121,6 +126,35 @@ export interface PyPsxConfig {
   config_version: string;
 }
 
+export interface PyPsxFeeStructure {
+  mode: string;
+  currency: string;
+  rates: {
+    commission_default_pct: number;
+    nccpl_rate: number;
+    cdc_transaction_rate: number;
+    cdc_transaction_floor_pkr: number;
+    cdc_custody_annual_rate: number;
+    transactional_rate: number;
+    cgt_filer_rate: number;
+    cgt_non_filer_rate: number;
+  };
+  applies: {
+    nccpl: boolean;
+    cdc_transaction: boolean;
+    transactional: boolean;
+    cdc_custody: boolean;
+    cgt: boolean;
+  };
+  cgt: {
+    filer_rate: number;
+    non_filer_rate: number;
+  };
+  rates_editable?: {
+    scope: string;
+  };
+}
+
 export async function getPypsxConfig(): Promise<PyPsxConfig> {
   try {
     return await pypsxFetch<PyPsxConfig>("/v1/partner-api/config");
@@ -140,3 +174,40 @@ export async function getPypsxConfig(): Promise<PyPsxConfig> {
     };
   }
 }
+
+export async function getPypsxFees(): Promise<PyPsxFeeStructure> {
+  try {
+    return await pypsxFetch<PyPsxFeeStructure>("/v1/partner-api/fees");
+  } catch (error) {
+    console.warn("Failed to fetch /v1/partner-api/fees from pyPSX, using default fee schedule", error);
+    return {
+      mode: "PAPER",
+      currency: "PKR",
+      rates: {
+        commission_default_pct: 0.55,
+        nccpl_rate: 0.00005,
+        cdc_transaction_rate: 0.000036,
+        cdc_transaction_floor_pkr: 5,
+        cdc_custody_annual_rate: 0.00005625,
+        transactional_rate: 0.00003,
+        cgt_filer_rate: 0.15,
+        cgt_non_filer_rate: 0.15,
+      },
+      applies: {
+        nccpl: true,
+        cdc_transaction: false,
+        transactional: false,
+        cdc_custody: false,
+        cgt: true,
+      },
+      cgt: {
+        filer_rate: 0.15,
+        non_filer_rate: 0.15,
+      },
+      rates_editable: {
+        scope: "sandbox_only",
+      },
+    };
+  }
+}
+

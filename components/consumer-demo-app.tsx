@@ -29,7 +29,13 @@ import {
   Activity,
   Percent,
   Coins,
+  Target,
+  Shield,
+  Trash2,
+  Zap,
+  Crosshair,
 } from "lucide-react";
+
 
 interface KmiInstrument {
   symbol: string;
@@ -154,6 +160,7 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
   // Trading Terminal State
   const [tradeSide, setTradeSide] = useState<"BUY" | "SELL">("BUY");
   const [orderType, setOrderType] = useState<OrderType>("MARKET");
+  const [bracketEntryType, setBracketEntryType] = useState<"MARKET" | "LIMIT">("MARKET");
   const [tradeQty, setTradeQty] = useState<number>(100);
   const [limitPrice, setLimitPrice] = useState<string>("");
   const [stopPrice, setStopPrice] = useState<string>("");
@@ -162,6 +169,14 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
   const [tradeSubmitting, setTradeSubmitting] = useState(false);
   const [tradeError, setTradeError] = useState<string | null>(null);
   const [tradeSuccess, setTradeSuccess] = useState<string | null>(null);
+  const [conflictModal, setConflictModal] = useState<{
+    isOpen: boolean;
+    code?: string;
+    detail?: string;
+    targetSymbol?: string;
+    targetQty?: number;
+    parentOrderId?: string;
+  }>({ isOpen: false });
 
   // Dynamic Broker Config from pyPSX
   const { data: brokerConfig } = useSWR<PyPsxBrokerConfig>("/api/config", fetcher, {
@@ -355,9 +370,16 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
   const estExecutionPrice = useMemo(() => {
     if (!selectedStock) return 0;
     if (orderType === "MARKET") {
-      return tradeSide === "BUY" ? topAskPrice : topBidPrice;
+      return tradeSide === "BUY" ? (topAskPrice || liveStockPrice) : (topBidPrice || liveStockPrice);
     }
-    if (["LIMIT", "BRACKET"].includes(orderType)) {
+    if (orderType === "BRACKET") {
+      if (bracketEntryType === "MARKET") {
+        return tradeSide === "BUY" ? (topAskPrice || liveStockPrice) : (topBidPrice || liveStockPrice);
+      }
+      const parsedLimit = parseFloat(limitPrice);
+      return !isNaN(parsedLimit) && parsedLimit > 0 ? parsedLimit : liveStockPrice;
+    }
+    if (orderType === "LIMIT") {
       const parsedLimit = parseFloat(limitPrice);
       return !isNaN(parsedLimit) && parsedLimit > 0 ? parsedLimit : liveStockPrice;
     }
@@ -374,7 +396,7 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
       return !isNaN(parsedTp) && parsedTp > 0 ? parsedTp : liveStockPrice;
     }
     return liveStockPrice;
-  }, [selectedStock, orderType, tradeSide, limitPrice, stopPrice, takeProfitPrice, topAskPrice, topBidPrice, liveStockPrice]);
+  }, [selectedStock, orderType, bracketEntryType, tradeSide, limitPrice, stopPrice, takeProfitPrice, topAskPrice, topBidPrice, liveStockPrice]);
 
   const grossNotional = useMemo(() => {
     return Number((estExecutionPrice * (tradeQty || 0)).toFixed(2));
@@ -426,6 +448,34 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
     return tradeSide === "SELL" && tradeQty > ownedQuantity;
   }, [tradeSide, tradeQty, ownedQuantity]);
 
+  // Bracket Risk vs Reward Analytics
+  const bracketAnalytics = useMemo(() => {
+    if (orderType !== "BRACKET") return null;
+    const entry = estExecutionPrice;
+    const tp = parseFloat(takeProfitPrice) || (entry * 1.1);
+    const sl = parseFloat(stopLossPrice) || (entry * 0.95);
+    const gainPerShare = Math.max(0, tp - entry);
+    const lossPerShare = Math.max(0, entry - sl);
+    const totalPotentialGain = Number((gainPerShare * tradeQty).toFixed(2));
+    const totalMaxRisk = Number((lossPerShare * tradeQty).toFixed(2));
+    const rrRatio = lossPerShare > 0 ? (gainPerShare / lossPerShare).toFixed(2) : "N/A";
+    const tpPct = entry > 0 ? (((tp - entry) / entry) * 100).toFixed(1) : "0.0";
+    const slPct = entry > 0 ? (((entry - sl) / entry) * 100).toFixed(1) : "0.0";
+
+    return {
+      entry,
+      tp,
+      sl,
+      gainPerShare,
+      lossPerShare,
+      totalPotentialGain,
+      totalMaxRisk,
+      rrRatio,
+      tpPct,
+      slPct,
+    };
+  }, [orderType, estExecutionPrice, takeProfitPrice, stopLossPrice, tradeQty]);
+
   // Portfolio Totals & Statistics
   const portfolioSummary = useMemo(() => {
     const positions = portfolioData?.portfolio?.positions || [];
@@ -433,14 +483,49 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
     const totalMarketValue = positions.reduce((acc, p) => acc + (p.market_value || (p.quantity * p.last_price)), 0);
     const totalUnrealizedPnl = positions.reduce((acc, p) => acc + (p.unrealized_pnl || 0), 0);
     const totalPnlPct = totalInvestedCost > 0 ? (totalUnrealizedPnl / totalInvestedCost) * 100 : 0;
+    const totalEquity = portfolioData?.portfolio?.equity ?? (availableCash + totalMarketValue);
+
     return {
       totalInvestedCost,
       totalMarketValue,
       totalUnrealizedPnl,
       totalPnlPct,
+      totalEquity,
       count: positions.length,
     };
-  }, [portfolioData]);
+  }, [portfolioData, availableCash]);
+
+  // Cancel Order Handler
+  const handleCancelOrder = async (orderId: string) => {
+    try {
+      const res = await fetch(`/api/orders?order_id=${encodeURIComponent(orderId)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setTradeSuccess(`Order ${orderId.substring(0, 10)}... successfully cancelled.`);
+        mutateOrders();
+        mutatePortfolio();
+      } else {
+        const err = await res.json();
+        setTradeError(err.error || "Failed to cancel order.");
+      }
+    } catch (e: any) {
+      setTradeError(e.message || "Failed to cancel order.");
+    }
+  };
+
+  // Block-and-Prompt Resolution: Cancel conflicting bracket parent then retry sell
+  const handleCancelBracketAndRetrySell = async () => {
+    const parentId = conflictModal.parentOrderId;
+    setConflictModal({ isOpen: false });
+    if (parentId) {
+      await handleCancelOrder(parentId);
+    }
+    // Re-trigger trade execution
+    setTimeout(() => {
+      handleExecuteTrade();
+    }, 500);
+  };
 
   // Execute Order Handler
   const handleExecuteTrade = async () => {
@@ -502,8 +587,8 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
         pypsxOrderType = limitPrice ? "LIMIT" : "MARKET";
         pypsxOrderClass = "OCO";
       } else if (orderType === "BRACKET") {
-        pypsxOrderType = "LIMIT";
         pypsxOrderClass = "BRACKET";
+        pypsxOrderType = bracketEntryType === "MARKET" ? "MARKET" : "LIMIT";
       }
 
       const payload: Record<string, any> = {
@@ -524,9 +609,13 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
       } else if (orderType === "TAKE_PROFIT") {
         payload.stop_price = parseFloat(takeProfitPrice || stopPrice) || (liveStockPrice * 1.1);
       } else if (orderType === "BRACKET") {
-        payload.price = parseFloat(limitPrice) || liveStockPrice;
-        payload.stop_loss_price = parseFloat(stopLossPrice) || Number((liveStockPrice * 0.95).toFixed(2));
-        payload.take_profit_price = parseFloat(takeProfitPrice) || Number((liveStockPrice * 1.1).toFixed(2));
+        if (bracketEntryType === "MARKET") {
+          payload.price = estExecutionPrice || liveStockPrice;
+        } else {
+          payload.price = parseFloat(limitPrice) || liveStockPrice;
+        }
+        payload.stop_loss_price = parseFloat(stopLossPrice) || Number((estExecutionPrice * 0.95).toFixed(2));
+        payload.take_profit_price = parseFloat(takeProfitPrice) || Number((estExecutionPrice * 1.1).toFixed(2));
       } else if (orderType === "OCO") {
         if (limitPrice) payload.price = parseFloat(limitPrice);
         payload.stop_loss_price = parseFloat(stopLossPrice) || Number((liveStockPrice * 0.95).toFixed(2));
@@ -541,13 +630,32 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
 
       const data = await res.json();
       if (!res.ok) {
-        setTradeError(data.message || data.error || "Order execution failed.");
+        if (data.code === "PYPSX-1416") {
+          // Find any pending bracket order on this symbol
+          const pendingBracket = (ordersData?.orders || []).find(
+            (o) => o.symbol.toUpperCase() === selectedStock.symbol.toUpperCase() && o.order_class === "BRACKET" && o.status === "PENDING"
+          );
+          setConflictModal({
+            isOpen: true,
+            code: "PYPSX-1416",
+            detail: data.detail || "These shares are tied to an active Bracket Order. Cancel the Bracket first, then place this sell.",
+            targetSymbol: selectedStock.symbol,
+            targetQty: tradeQty,
+            parentOrderId: pendingBracket?.order_id,
+          });
+          return;
+        }
+        if (data.code === "PYPSX-1415") {
+          setTradeError(`[PYPSX-1415] ${data.detail || data.error || "Insufficient available shares: some shares are locked in pending sell orders."}`);
+          return;
+        }
+        setTradeError(data.detail || data.message || data.error || "Order execution failed.");
         return;
       }
 
       const ord = data.order;
       setTradeSuccess(
-        `Successfully submitted ${tradeSide} ${tradeQty} ${selectedStock.symbol} (${orderType})! Status: ${ord.status}`
+        `Successfully submitted ${tradeSide} ${tradeQty} ${selectedStock.symbol} (${orderType}${orderType === "BRACKET" ? ` - ${bracketEntryType}` : ""})! Status: ${ord.status}`
       );
       mutatePortfolio();
       mutateOrders();
@@ -566,6 +674,7 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
     const askMax = Math.max(...(depthData.asks || []).map((a) => a.qty), 100);
     return Math.max(bidMax, askMax, 500);
   }, [depthData]);
+
 
   return (
     <div className="min-h-screen bg-[#07070D] text-slate-100 font-sans selection:bg-indigo-500/30">
@@ -917,18 +1026,71 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                       {(["MARKET", "LIMIT", "STOP_LOSS", "STOP_LIMIT", "TAKE_PROFIT", "OCO", "BRACKET"] as OrderType[]).map((type) => (
                         <button
                           key={type}
-                          onClick={() => setOrderType(type)}
-                          className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition ${
+                          onClick={() => {
+                            setOrderType(type);
+                            setTradeError(null);
+                            setTradeSuccess(null);
+                          }}
+                          className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition flex items-center justify-center gap-1 ${
                             orderType === type
                               ? "bg-indigo-600/20 border-indigo-500 text-indigo-300 shadow-sm"
                               : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700"
                           }`}
                         >
+                          {type === "BRACKET" && <Layers className="w-3 h-3 text-indigo-400" />}
                           {type.replace("_", " ")}
                         </button>
                       ))}
                     </div>
                   </div>
+
+                  {/* BRACKET ORDER ENTRY MODE SELECTOR (MARKET vs LIMIT) */}
+                  {orderType === "BRACKET" && (
+                    <div className="p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-500/30 space-y-3 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-indigo-200 flex items-center gap-1.5">
+                          <Layers className="w-4 h-4 text-indigo-400" />
+                          Bracket Entry Mode
+                        </span>
+                        <span className="text-[10px] text-indigo-300/80">
+                          {bracketEntryType === "MARKET" ? "Immediate Fill @ Market" : "Resting Order @ Limit Price"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-slate-900/90 border border-indigo-900/50">
+                        <button
+                          type="button"
+                          onClick={() => setBracketEntryType("MARKET")}
+                          className={`py-2 px-3 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                            bracketEntryType === "MARKET"
+                              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                              : "text-slate-400 hover:text-white"
+                          }`}
+                        >
+                          <Zap className="w-3.5 h-3.5" /> Market Buy (At Market Price)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBracketEntryType("LIMIT")}
+                          className={`py-2 px-3 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                            bracketEntryType === "LIMIT"
+                              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                              : "text-slate-400 hover:text-white"
+                          }`}
+                        >
+                          <Crosshair className="w-3.5 h-3.5" /> Limit Buy (At Limit Price)
+                        </button>
+                      </div>
+                      {bracketEntryType === "MARKET" ? (
+                        <p className="text-[11px] text-indigo-300/90 leading-relaxed">
+                          ⚡ <strong>Market Entry:</strong> Executes buy immediately at best available ask price (~PKR {estExecutionPrice.toFixed(2)}) and auto-attaches Stop-Loss & Take-Profit exits.
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-indigo-300/90 leading-relaxed">
+                          🎯 <strong>Limit Entry:</strong> Rests in order book until filled at PKR {limitPrice || estExecutionPrice.toFixed(2)}, then auto-arms Stop-Loss & Take-Profit exits.
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Inputs Grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -980,11 +1142,38 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                     </div>
 
                     {/* Limit Price Input */}
-                    {["LIMIT", "STOP_LIMIT", "BRACKET"].includes(orderType) && (
+                    {(orderType === "LIMIT" || orderType === "STOP_LIMIT" || (orderType === "BRACKET" && bracketEntryType === "LIMIT")) && (
                       <div>
-                        <label className="text-xs font-semibold text-slate-300 block mb-1.5">
-                          {orderType === "BRACKET" ? "Entry Limit Price (PKR)" : "Limit Price (PKR)"}
-                        </label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-semibold text-slate-300">
+                            {orderType === "BRACKET" ? "Entry Limit Price (PKR)" : "Limit Price (PKR)"}
+                          </label>
+                          <div className="flex gap-1 text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => setLimitPrice((liveStockPrice * 0.99).toFixed(2))}
+                              className="text-slate-400 hover:text-white font-mono"
+                            >
+                              -1%
+                            </button>
+                            <span className="text-slate-700">|</span>
+                            <button
+                              type="button"
+                              onClick={() => setLimitPrice(liveStockPrice.toFixed(2))}
+                              className="text-indigo-400 hover:text-indigo-300 font-mono"
+                            >
+                              Market
+                            </button>
+                            <span className="text-slate-700">|</span>
+                            <button
+                              type="button"
+                              onClick={() => setLimitPrice((liveStockPrice * 1.01).toFixed(2))}
+                              className="text-slate-400 hover:text-white font-mono"
+                            >
+                              +1%
+                            </button>
+                          </div>
+                        </div>
                         <input
                           type="number"
                           step="0.01"
@@ -1014,13 +1203,33 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                     {/* Take Profit Target (TAKE_PROFIT, OCO, BRACKET) */}
                     {["TAKE_PROFIT", "OCO", "BRACKET"].includes(orderType) && (
                       <div>
-                        <label className="text-xs font-semibold text-emerald-300 block mb-1.5">Take Profit Target (PKR)</label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-semibold text-emerald-300 flex items-center gap-1">
+                            <Target className="w-3.5 h-3.5 text-emerald-400" />
+                            Take Profit Target (PKR)
+                          </label>
+                          <div className="flex gap-1">
+                            {[0.05, 0.10, 0.15, 0.20].map((pct) => (
+                              <button
+                                key={`tp-${pct}`}
+                                type="button"
+                                onClick={() => {
+                                  const base = estExecutionPrice || liveStockPrice;
+                                  setTakeProfitPrice((base * (1 + pct)).toFixed(2));
+                                }}
+                                className="px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/50 text-[10px] font-mono text-emerald-300 hover:bg-emerald-800/50 transition"
+                              >
+                                +{pct * 100}%
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                         <input
                           type="number"
                           step="0.01"
                           value={takeProfitPrice}
                           onChange={(e) => setTakeProfitPrice(e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-emerald-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white font-mono text-sm outline-none transition"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-emerald-500/50 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white font-mono text-sm outline-none transition"
                           placeholder="e.g. 360.00"
                         />
                       </div>
@@ -1029,18 +1238,67 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                     {/* Stop Loss Target (OCO / BRACKET) */}
                     {["OCO", "BRACKET"].includes(orderType) && (
                       <div>
-                        <label className="text-xs font-semibold text-rose-300 block mb-1.5">Stop Loss Exit (PKR)</label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-semibold text-rose-300 flex items-center gap-1">
+                            <Shield className="w-3.5 h-3.5 text-rose-400" />
+                            Stop Loss Exit (PKR)
+                          </label>
+                          <div className="flex gap-1">
+                            {[0.03, 0.05, 0.08, 0.10].map((pct) => (
+                              <button
+                                key={`sl-${pct}`}
+                                type="button"
+                                onClick={() => {
+                                  const base = estExecutionPrice || liveStockPrice;
+                                  setStopLossPrice((base * (1 - pct)).toFixed(2));
+                                }}
+                                className="px-1.5 py-0.5 rounded bg-rose-950/60 border border-rose-800/50 text-[10px] font-mono text-rose-300 hover:bg-rose-800/50 transition"
+                              >
+                                -{pct * 100}%
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                         <input
                           type="number"
                           step="0.01"
                           value={stopLossPrice}
                           onChange={(e) => setStopLossPrice(e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-rose-500 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 text-white font-mono text-sm outline-none transition"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-rose-500/50 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 text-white font-mono text-sm outline-none transition"
                           placeholder="e.g. 310.00"
                         />
                       </div>
                     )}
                   </div>
+
+                  {/* BRACKET RISK VS REWARD RATIO ANALYTICS CARD */}
+                  {bracketAnalytics && (
+                    <div className="p-3.5 rounded-xl bg-gradient-to-r from-slate-900/90 via-indigo-950/30 to-slate-900/90 border border-indigo-500/30 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                          <Activity className="w-3.5 h-3.5 text-indigo-400" /> Bracket Strategy Projection
+                        </span>
+                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          Risk/Reward: 1 : {bracketAnalytics.rrRatio}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs font-mono pt-1">
+                        <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800">
+                          <span className="text-[10px] text-slate-400 block">Entry ({bracketEntryType})</span>
+                          <span className="font-bold text-white">PKR {bracketAnalytics.entry.toFixed(2)}</span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-emerald-950/30 border border-emerald-800/40">
+                          <span className="text-[10px] text-emerald-400 block">Potential Profit (+{bracketAnalytics.tpPct}%)</span>
+                          <span className="font-bold text-emerald-300">+PKR {bracketAnalytics.totalPotentialGain.toLocaleString()}</span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-rose-950/30 border border-rose-800/40">
+                          <span className="text-[10px] text-rose-400 block">Max Risk Floor (-{bracketAnalytics.slPct}%)</span>
+                          <span className="font-bold text-rose-300">-PKR {bracketAnalytics.totalMaxRisk.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
 
                   {/* ========================================================================= */}
                   {/*               LIVE COST / COMMISSION / CGT TAX BREAKDOWN                  */}
@@ -1449,6 +1707,7 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                             <th className="pb-3 font-semibold">Qty</th>
                             <th className="pb-3 font-semibold">Price / Targets</th>
                             <th className="pb-3 font-semibold">Status</th>
+                            <th className="pb-3 font-semibold text-center">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/60 font-mono">
@@ -1497,6 +1756,19 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                                   {ord.status}
                                 </span>
                               </td>
+                              <td className="py-3 text-center">
+                                {ord.status === "PENDING" ? (
+                                  <button
+                                    onClick={() => handleCancelOrder(ord.order_id)}
+                                    title="Cancel pending order"
+                                    className="px-2 py-1 rounded bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500 hover:text-white transition text-[10px] font-sans font-semibold inline-flex items-center gap-1"
+                                  >
+                                    <Trash2 className="w-3 h-3" /> Cancel
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-600 font-sans text-[10px]">—</span>
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -1530,6 +1802,7 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                           <th className="pb-3 font-semibold">Qty</th>
                           <th className="pb-3 font-semibold">Price / Targets</th>
                           <th className="pb-3 font-semibold">Status</th>
+                          <th className="pb-3 font-semibold text-center">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60 font-mono">
@@ -1578,6 +1851,19 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                                 {ord.status}
                               </span>
                             </td>
+                            <td className="py-3 text-center">
+                              {ord.status === "PENDING" ? (
+                                <button
+                                  onClick={() => handleCancelOrder(ord.order_id)}
+                                  title="Cancel pending order"
+                                  className="px-2 py-1 rounded bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500 hover:text-white transition text-[10px] font-sans font-semibold inline-flex items-center gap-1"
+                                >
+                                  <Trash2 className="w-3 h-3" /> Cancel
+                                </button>
+                              ) : (
+                                <span className="text-slate-600 font-sans text-[10px]">—</span>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1593,6 +1879,55 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
           </div>
         )}
       </main>
+
+      {/* Block-and-Prompt Modal for PYPSX-1416 Bracket Conflict */}
+      {conflictModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-md p-6 rounded-3xl bg-[#0F0F1E] border border-amber-500/40 shadow-2xl space-y-4 relative">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Bracket Lock Detected (PYPSX-1416)</h3>
+                <span className="text-[11px] font-mono text-amber-400">Attached OCO Exit Protected</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {conflictModal.detail || "These shares are currently tied to an active Bracket Order's stop-loss / take-profit exits. To prevent conflicting exit instructions, the broker requires releasing the bracket before executing a direct manual sell."}
+            </p>
+
+            <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Target Symbol:</span>
+                <span className="font-bold text-white font-mono">{conflictModal.targetSymbol}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Sell Quantity:</span>
+                <span className="font-bold text-white font-mono">{conflictModal.targetQty} shares</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConflictModal({ isOpen: false })}
+                className="py-2.5 px-4 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-400 hover:text-white transition"
+              >
+                Keep Bracket (Dismiss)
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelBracketAndRetrySell}
+                className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-500 hover:to-rose-500 text-white font-bold text-xs shadow-lg shadow-amber-600/20 transition flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Release & Place Sell
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Authentication Modal */}
       {showAuthModal && (
@@ -1705,3 +2040,4 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
     </div>
   );
 }
+

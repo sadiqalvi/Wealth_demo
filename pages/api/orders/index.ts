@@ -141,14 +141,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!take_profit_price || isNaN(Number(take_profit_price))) {
           return res.status(422).json({ error: "Missing Take Profit Price", message: "take_profit_price is required for BRACKET orders." });
         }
-        if (price === undefined || price === null || isNaN(Number(price))) {
-          return res.status(422).json({ error: "Missing Limit Price", message: "Entry limit price is required for BRACKET orders." });
-        }
-        orderPayload.order_type = "LIMIT";
         orderPayload.order_class = "BRACKET";
-        orderPayload.price = Number(price);
         orderPayload.stop_loss_price = Number(stop_loss_price);
         orderPayload.take_profit_price = Number(take_profit_price);
+
+        if (normalizedOrderType === "MARKET") {
+          orderPayload.order_type = "MARKET";
+          if (price !== undefined && price !== null && !isNaN(Number(price))) {
+            orderPayload.price = Number(price);
+          } else {
+            orderPayload.price = benchmarkPrice;
+          }
+        } else {
+          // Default to LIMIT entry
+          if (price === undefined || price === null || isNaN(Number(price))) {
+            return res.status(422).json({ error: "Missing Limit Price", message: "Entry limit price is required for LIMIT BRACKET orders." });
+          }
+          orderPayload.order_type = "LIMIT";
+          orderPayload.price = Number(price);
+        }
       } else if (normalizedOrderClass === "OCO") {
         if (!stop_loss_price || isNaN(Number(stop_loss_price))) {
           return res.status(422).json({ error: "Missing Stop Loss Price", message: "stop_loss_price is required for OCO orders." });
@@ -214,12 +225,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     } catch (error: any) {
       console.error("POST order error:", error);
-      const status = error.status || (error.data?.code === 422 ? 422 : 500);
+      const status = error.status || (error.data?.code?.startsWith("PYPSX-14") ? 422 : 500);
       return res.status(status).json({
         error: error.message || "Failed to execute order.",
+        code: error.code || error.data?.code,
+        detail: error.data?.detail,
+      });
+    }
+  }
+
+  if (req.method === "DELETE") {
+    try {
+      const orderId = req.query.order_id as string || req.body?.order_id as string;
+      if (!orderId) {
+        return res.status(400).json({ error: "Missing order_id parameter." });
+      }
+
+      const cancelRes = await pypsxFetch<any>(
+        `/v1/partner-api/orders/${orderId}`,
+        { method: "DELETE" }
+      );
+
+      return res.status(200).json({ success: true, result: cancelRes });
+    } catch (error: any) {
+      console.error("DELETE order error:", error);
+      const status = error.status || 500;
+      return res.status(status).json({
+        error: error.message || "Failed to cancel order.",
+        code: error.code || error.data?.code,
+        detail: error.data?.detail,
       });
     }
   }
 
   return res.status(405).json({ error: "Method not allowed" });
 }
+
