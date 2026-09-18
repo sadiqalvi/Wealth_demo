@@ -1,4 +1,4 @@
-const PYPSX_BASE_URL = process.env.PYPSX_BASE_URL || "http://localhost:8080";
+const PYPSX_BASE_URL = process.env.PYPSX_BASE_URL || "https://brokerapi.paper.pypsx.com";
 const PYPSX_KEY_ID = process.env.PYPSX_ORG_API_KEY_ID || "PYPSX-SANDBOX-WEALTH-21F957D2D5D8";
 const PYPSX_SECRET_KEY = process.env.PYPSX_ORG_API_SECRET_KEY || "52_NZhD4NOW7IeDYDTJHWkfPnr9ye6gldeJLuD1TaQc";
 
@@ -161,7 +161,7 @@ export async function getPypsxConfig(): Promise<PyPsxConfig> {
   } catch (error) {
     console.warn("Failed to fetch /v1/partner-api/config from pyPSX, using fallback config", error);
     return {
-      partner_id: "PYPSX_DEMO",
+      partner_id: "WEALTH",
       api_key_id: PYPSX_KEY_ID,
       environment: "sandbox",
       commission_rate: 0.55,
