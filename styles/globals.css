@@ -21,7 +21,8 @@ body {
 }
 
 .glass-card {
-  @apply rounded-card border border-rev-border/40;
+  border-radius: 20px;
+  border: 1px solid rgba(42, 42, 62, 0.4);
   background: rgba(26, 26, 46, 0.7);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);

@@ -35,6 +35,8 @@ import {
   Zap,
   Crosshair,
 } from "lucide-react";
+import { KycOnboardingView } from "./kyc/kyc-onboarding-view";
+
 
 
 interface KmiInstrument {
@@ -152,9 +154,9 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
   const [nameInput, setNameInput] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Active view: "watchlist" | "detail" | "portfolio" | "orders"
+  // Active view: "watchlist" | "detail" | "portfolio" | "orders" | "kyc"
   const [selectedStockSymbol, setSelectedStockSymbol] = useState<string | null>(initialSymbol || null);
-  const [mainTab, setMainTab] = useState<"market" | "portfolio" | "history">("market");
+  const [mainTab, setMainTab] = useState<"market" | "portfolio" | "history" | "kyc">("market");
   const [searchQuery, setSearchQuery] = useState("");
 
   // Trading Terminal State
@@ -714,6 +716,16 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
 
             {currentUser ? (
               <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setSelectedStockSymbol(null);
+                    setMainTab("kyc");
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 hover:text-white hover:bg-indigo-500/20 text-xs font-semibold transition"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>CDC KYC Portal</span>
+                </button>
                 <div className="hidden sm:flex flex-col items-end text-right">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-semibold text-slate-200">{currentUser.fullName}</span>
@@ -736,6 +748,20 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                   </span>
                 </div>
                 <button
+                  onClick={() => {
+                    setSelectedStockSymbol(null);
+                    setMainTab("kyc");
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    mainTab === "kyc"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                      : "bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 hover:text-white hover:bg-indigo-500/20"
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>CDC KYC Portal</span>
+                </button>
+                <button
                   onClick={handleLogout}
                   title="Log out"
                   className="p-2 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-rose-400 transition-colors"
@@ -745,6 +771,16 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
               </div>
             ) : (
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setSelectedStockSymbol(null);
+                    setMainTab("kyc");
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 hover:text-white hover:bg-indigo-500/20 text-xs font-semibold transition"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>CDC KYC Portal</span>
+                </button>
                 <button
                   onClick={() => {
                     setAuthMode("login");
@@ -1472,6 +1508,14 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                 >
                   <FileText className="w-3.5 h-3.5" /> Order Log ({ordersData?.orders?.length || 0})
                 </button>
+                <button
+                  onClick={() => setMainTab("kyc")}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+                    mainTab === "kyc" ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> CDC KYC Onboarding
+                </button>
               </div>
 
               {/* Search Bar */}
@@ -1875,6 +1919,11 @@ export function ConsumerDemoApp({ initialSymbol }: { initialSymbol?: string }) {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* TAB CONTENT: CDC KYC ONBOARDING */}
+            {mainTab === "kyc" && (
+              <KycOnboardingView />
             )}
           </div>
         )}

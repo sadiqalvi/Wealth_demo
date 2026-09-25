@@ -1,10 +1,9 @@
 const { PrismaClient } = require("@prisma/client");
 const db = new PrismaClient();
 
-const PYPSX_BASE_URL = process.env.PYPSX_BASE_URL || "http://localhost:8080";
-const PYPSX_KEY_ID = process.env.PYPSX_ORG_API_KEY_ID || "PYPSX-SANDBOX-WEALTH-21F957D2D5D8";
-const PYPSX_SECRET_KEY = process.env.PYPSX_ORG_API_SECRET_KEY || "52_NZhD4NOW7IeDYDTJHWkfPnr9ye6gldeJLuD1TaQc";
-
+const PYPSX_BASE_URL = process.env.PYPSX_BASE_URL || "https://brokerapi.pypsx.com";
+const PYPSX_KEY_ID = process.env.PYPSX_ORG_API_KEY_ID || "PYPSX-SANDBOX-PYPSXOFFICIA-5F04DF960030";
+const PYPSX_SECRET_KEY = process.env.PYPSX_ORG_API_SECRET_KEY || "7x_sO9PKa9jHpPCubHvDpltty3PWq0j8RcEpWX-tmws";
 
 async function pypsxFetch(endpoint, options = {}) {
   const url = `${PYPSX_BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
@@ -28,8 +27,9 @@ function getRandomCnic() {
 
 async function runTestUpgrades() {
   console.log("===================================================================");
-  console.log("  PSX KMI-30 Platform Upgrades & Broker Config Integration Test");
+  console.log("  PSX Trading & KYC Platform Integration Test");
   console.log(`  API Key: ${PYPSX_KEY_ID}`);
+  console.log(`  Base URL: ${PYPSX_BASE_URL}`);
   console.log("===================================================================\n");
 
   // 1. Check Broker Config
@@ -47,20 +47,20 @@ async function runTestUpgrades() {
     process.exit(1);
   }
 
-  // 2. Check Level-2 Market Depth API
-  console.log("\n[CHECK 2] Testing Level-2 Market Depth API Endpoint...");
-  const depthRes = await pypsxFetch("/v1/partner-api/market/depth/OGDC?levels=5");
-  console.log(`  -> Depth Status: ${depthRes.status}`);
-  console.log(`  -> Bids count: ${depthRes.data.bids?.length || 0}, Asks count: ${depthRes.data.asks?.length || 0}`);
-  if (depthRes.data.bids?.length > 0 && depthRes.data.asks?.length > 0) {
-    console.log(`  -> Top Bid: PKR ${depthRes.data.bids[0].price} (${depthRes.data.bids[0].qty} shares)`);
-    console.log(`  -> Top Ask: PKR ${depthRes.data.asks[0].price} (${depthRes.data.asks[0].qty} shares)`);
-    console.log("  [PASSED] Level-2 Market Depth verified!");
-  } else {
-    console.log("  [INFO] Synthetic depth fallback will be served by Next.js gateway.");
+  // 2. Check Fee Structure
+  console.log("\n[CHECK 2] Fetching live Fee Schedule (/v1/partner-api/fees)...");
+  const feesRes = await pypsxFetch("/v1/partner-api/fees");
+  console.log(`  -> Status: ${feesRes.status}`);
+  console.log(`  -> Clearance Rate: ${feesRes.data.rates?.clearance_fee_rate}`);
+  console.log(`  -> Sindh Sales Tax (SST): ${feesRes.data.rates?.sst_rate * 100}%`);
+  console.log(`  -> NCCPL Rate: ${feesRes.data.rates?.nccpl_rate}`);
+  console.log(`  -> CDC Transaction Rate: ${feesRes.data.rates?.cdc_transaction_rate} (Floor: PKR ${feesRes.data.rates?.cdc_transaction_floor_pkr})`);
+  console.log(`  -> CGT Filer Rate: ${feesRes.data.rates?.cgt_filer_rate * 100}%`);
+  if (feesRes.status === 200) {
+    console.log("  [PASSED] Live broker fee structure retrieved successfully!");
   }
 
-  // 3. Multi-User Creation & Isolation
+  // 3. Multi-User Sandbox Onboarding & Balance Verification
   console.log("\n[CHECK 3] Testing Multi-User Sandbox Onboarding & Balance Verification...");
   const ts = Date.now();
   const user1Email = `trader1_${ts}@test.pk`;
@@ -93,26 +93,30 @@ async function runTestUpgrades() {
   console.log(`  -> Cash: PKR ${portRes.data.cash}, Equity: PKR ${portRes.data.equity}, Positions: ${portRes.data.positions?.length || 0}`);
   console.log("  [PASSED] Portfolio structure verified!");
 
-  // 5. Commission & CGT Calculation using Dynamic Config
+  // 5. Commission & Financial Calculations using Dynamic Config
   console.log("\n[CHECK 5] Testing Buy Commission & Sell CGT Calculations with Dynamic Rate...");
-  const dynamicCommPct = configRes.data.commission_rate || 0.55;
-  const dynamicCommRate = dynamicCommPct / 100; // e.g. 0.0055
+  const dynamicCommPct = configRes.data.commission_rate || 0.35;
+  const dynamicCommRate = dynamicCommPct / 100; // e.g. 0.0035
   const shares = 100;
-  const buyPrice = 200.00;
-  const grossBuy = shares * buyPrice; // 20,000 PKR
-  const buyCommission = grossBuy * dynamicCommRate; // 110 PKR @ 0.55%
-  const totalBuyCost = grossBuy + buyCommission; // 20,110 PKR
-  console.log(`  -> BUY 100 @ 200: Gross = PKR ${grossBuy}, Comm (${dynamicCommPct}%) = PKR ${buyCommission.toFixed(2)}, Total Cost = PKR ${totalBuyCost.toFixed(2)}`);
+  const buyPrice = 300.00;
+  const grossBuy = shares * buyPrice; // 30,000 PKR
+  const buyCommission = grossBuy * dynamicCommRate; // 105 PKR @ 0.35%
+  const sst = buyCommission * 0.13; // 13.65 PKR SST on commission
+  const clearance = grossBuy * 0.0002; // 6 PKR
+  const nccpl = grossBuy * 0.00005; // 1.50 PKR
+  const cdc = Math.max(5, grossBuy * 0.000036); // 5 PKR
+  const totalBuyCost = grossBuy + buyCommission + sst + clearance + nccpl + cdc;
+  console.log(`  -> BUY 100 @ 300: Gross = PKR ${grossBuy}, Comm (${dynamicCommPct}%) = PKR ${buyCommission.toFixed(2)}, SST = PKR ${sst.toFixed(2)}, Clearance = PKR ${clearance.toFixed(2)}, Total Cost = PKR ${totalBuyCost.toFixed(2)}`);
 
-  const sellPrice = 250.00;
-  const grossSell = shares * sellPrice; // 25,000 PKR
-  const sellCommission = grossSell * dynamicCommRate; // 137.50 PKR
-  const costBasis = shares * buyPrice; // 20,000 PKR
+  const sellPrice = 350.00;
+  const grossSell = shares * sellPrice; // 35,000 PKR
+  const sellCommission = grossSell * dynamicCommRate; // 122.50 PKR
+  const costBasis = shares * buyPrice; // 30,000 PKR
   const realizedGain = grossSell - costBasis; // 5,000 PKR profit
   const cgtRate = 0.15; // 15%
   const cgtTax = realizedGain * cgtRate; // 750 PKR
-  const netSellProceeds = grossSell - sellCommission - cgtTax;
-  console.log(`  -> SELL 100 @ 250: Gross = PKR ${grossSell}, Comm = PKR ${sellCommission.toFixed(2)}, Gain = PKR ${realizedGain}, 15% CGT = PKR ${cgtTax}, Net Proceeds = PKR ${netSellProceeds.toFixed(2)}`);
+  const netSellProceeds = grossSell - sellCommission - (sellCommission * 0.13) - (grossSell * 0.0002) - (grossSell * 0.00005) - Math.max(5, grossSell * 0.000036) - cgtTax;
+  console.log(`  -> SELL 100 @ 350: Gross = PKR ${grossSell}, Comm = PKR ${sellCommission.toFixed(2)}, Gain = PKR ${realizedGain}, 15% CGT = PKR ${cgtTax}, Net Proceeds = PKR ${netSellProceeds.toFixed(2)}`);
   console.log("  [PASSED] Commission & CGT calculations verified!");
 
   console.log("\n===================================================================");
