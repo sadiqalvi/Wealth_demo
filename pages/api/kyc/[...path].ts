@@ -1,8 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
 const KYC_BASE_URL = process.env.KYC_BASE_URL || "https://brokerapi.pypsx.com";
-const KYC_ORG_API_KEY_ID = process.env.KYC_ORG_API_KEY_ID || "KYC_IONNYUQYPWYHWWSI";
-const KYC_ORG_API_SECRET_KEY = process.env.KYC_ORG_API_SECRET_KEY || "USZIMT3MBVUPO7RTWXWRDNOG34JJ5PL2OHW3E5Y";
+const KYC_ORG_API_KEY_ID = process.env.KYC_ORG_API_KEY_ID || "KYC_5MSHFYU7Q6YRK7IB";
+const KYC_ORG_API_SECRET_KEY = process.env.KYC_ORG_API_SECRET_KEY || "O7FZ7BCI52IAC3CK7SZMSHO5UGWFBBDS4GVTNZY";
 
 export const config = {
   api: {
@@ -36,6 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       "PYPSX-ORG-API-SECRET-KEY": KYC_ORG_API_SECRET_KEY,
       "Content-Type": "application/json",
       Accept: "application/json",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     };
 
     const fetchOptions: RequestInit = {

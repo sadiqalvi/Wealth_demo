@@ -97,19 +97,19 @@ export function formatCgpErrorMessage(rawError: string, context?: "mobile" | "em
 
 export function StepIdentity({ application, password, onUpdateStep, onNext, loading, onDraftUpdate }: StepIdentityProps) {
   const [identity, setIdentity] = useState<IdentityData>({
-    ...application.identity,
-    email: application.identity.email || "applicant@example.com",
-    mobile: application.identity.mobile || "03062486537",
-    mobile_owner_type: application.identity.mobile_owner_type || "Self",
-    iban: application.identity.iban || "PK32MEZN0001310107513652",
-    bank_name: application.identity.bank_name || (application.identity.iban?.includes("MEZN") ? "Meezan Bank Limited" : application.identity.iban ? "Habib Bank Limited (HBL)" : undefined),
-    account_title: application.identity.account_title || application.personal.full_name || "VALUED APPLICANT",
+    ...(application.identity || {}),
+    email: application.identity?.email || "applicant@example.com",
+    mobile: application.identity?.mobile || "03062486537",
+    mobile_owner_type: application.identity?.mobile_owner_type || "Self",
+    iban: application.identity?.iban || "PK32MEZN0001310107513652",
+    bank_name: application.identity?.bank_name || (application.identity?.iban?.includes("MEZN") ? "Meezan Bank Limited" : application.identity?.iban ? "Habib Bank Limited (HBL)" : undefined),
+    account_title: application.identity?.account_title || application.personal?.full_name || "VALUED APPLICANT",
   });
 
   // Mobile Ownership Additional Details
-  const [relativeCnic, setRelativeCnic] = useState<string>(application.identity.relative_cnic || "");
-  const [relativeName, setRelativeName] = useState<string>(application.identity.relative_name || "");
-  const [declarationAccepted, setDeclarationAccepted] = useState<boolean>(application.identity.mobile_declaration_accepted ?? false);
+  const [relativeCnic, setRelativeCnic] = useState<string>(application.identity?.relative_cnic || "");
+  const [relativeName, setRelativeName] = useState<string>(application.identity?.relative_name || "");
+  const [declarationAccepted, setDeclarationAccepted] = useState<boolean>(application.identity?.mobile_declaration_accepted ?? false);
 
   // Stored / Portal Verified Identity Records (Source of Truth on CDC Portal)
   const [portalVerified, setPortalVerified] = useState<{
@@ -130,15 +130,15 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
       }
     } catch {}
     return {
-      email: application.identity.email_verified ? application.identity.email : "sadiq.alvi.89@gmail.com",
-      email_verified: application.identity.email_verified ?? true,
-      mobile: application.identity.mobile_verified ? application.identity.mobile : "03062486537",
-      mobile_verified: application.identity.mobile_verified ?? true,
-      mobile_owner_type: application.identity.mobile_owner_type || "Self",
-      iban: application.identity.iban_verified ? application.identity.iban : (application.identity.iban || "PK32MEZN0001310107513652"),
-      iban_verified: application.identity.iban_verified ?? true,
-      bank_name: application.identity.bank_name || "Meezan Bank Limited",
-      account_title: application.identity.account_title || application.personal.full_name || "AHMED YOUSAF ELVI",
+      email: application.identity?.email_verified ? application.identity?.email : "sadiq.alvi.89@gmail.com",
+      email_verified: application.identity?.email_verified ?? true,
+      mobile: application.identity?.mobile_verified ? application.identity?.mobile : "03062486537",
+      mobile_verified: application.identity?.mobile_verified ?? true,
+      mobile_owner_type: application.identity?.mobile_owner_type || "Self",
+      iban: application.identity?.iban_verified ? application.identity?.iban : (application.identity?.iban || "PK32MEZN0001310107513652"),
+      iban_verified: application.identity?.iban_verified ?? true,
+      bank_name: application.identity?.bank_name || "Meezan Bank Limited",
+      account_title: application.identity?.account_title || application.personal?.full_name || "AHMED YOUSAF ELVI",
     };
   });
 
@@ -147,9 +147,9 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
   const [warmupDone, setWarmupDone] = useState<boolean>(false);
 
   // Edit / Re-verify toggles
-  const [isEditingEmail, setIsEditingEmail] = useState<boolean>(!application.identity.email_verified);
-  const [isEditingMobile, setIsEditingMobile] = useState<boolean>(!application.identity.mobile_verified);
-  const [isEditingIban, setIsEditingIban] = useState<boolean>(!application.identity.iban_verified);
+  const [isEditingEmail, setIsEditingEmail] = useState<boolean>(!application.identity?.email_verified);
+  const [isEditingMobile, setIsEditingMobile] = useState<boolean>(!application.identity?.mobile_verified);
+  const [isEditingIban, setIsEditingIban] = useState<boolean>(!application.identity?.iban_verified);
 
   // Confirmation Modal for Unlocking an Already-Verified Field
   const [confirmChangeModal, setConfirmChangeModal] = useState<{

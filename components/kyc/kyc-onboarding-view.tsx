@@ -246,6 +246,10 @@ export function isDocumentsStepComplete(app: KycApplication | null | undefined):
 
 export function getFirstIncompleteStep(app: KycApplication | null | undefined): KycStepKey {
   if (!app) return "identity";
+  if (app.current_page) {
+    const pageMatched = STEPS_CONFIG.find((s) => s.page === app.current_page);
+    if (pageMatched) return pageMatched.key;
+  }
   if (!isIdentityStepComplete(app)) return "identity";
   if (!isPersonalStepComplete(app)) return "personal";
   if (!isProfessionStepComplete(app)) return "profession";
@@ -574,9 +578,16 @@ export function KycOnboardingView() {
 
       // 4. Load initialized application
       const fullApp = await kycService.getApplication(createdAppId);
-      setApplication(fullApp);
-      setPortalPassword(regPassword);
-      setCurrentStep(getFirstIncompleteStep(fullApp));
+      const normalized = normalizeApplication(fullApp);
+      if (normalized) {
+        setApplication(normalized);
+        setPortalPassword(regPassword);
+        setCurrentStep(getFirstIncompleteStep(normalized));
+        try {
+          localStorage.setItem(STORAGE_APP_KEY, JSON.stringify(normalized));
+          localStorage.setItem(STORAGE_PWD_KEY, regPassword);
+        } catch {}
+      }
 
       setShowRegisterModal(false);
       setRegStage("DETAILS");
@@ -615,9 +626,62 @@ export function KycOnboardingView() {
     setErrorMsg(null);
     try {
       const app = await kycService.resumeExistingApplication(cnic, pass);
-      setApplication(app);
+      const normalized = normalizeApplication(app);
+      if (!normalized) {
+        throw new Error("Failed to load application profile from CDC.");
+      }
+      setApplication(normalized);
       setPortalPassword(pass);
-      const step = getFirstIncompleteStep(app);
+      try {
+        localStorage.setItem(STORAGE_APP_KEY, JSON.stringify(normalized));
+        localStorage.setItem(STORAGE_PWD_KEY, pass);
+      } catch {}
+
+      // Fetch draft in background to merge any saved form inputs
+      kycService.getDraft(normalized.id).then((draft) => {
+        if (draft?.sections) {
+          const draftSections = draft.sections;
+          setApplication((prev) => {
+            if (!prev) return null;
+            const merged = normalizeApplication({
+              ...prev,
+              personal: {
+                ...prev.personal,
+                ...(draftSections.personal?.personal || draftSections.personal),
+              },
+              address: {
+                ...prev.address,
+                ...(draftSections.personal?.address || draftSections.address),
+              },
+              profession: {
+                ...prev.profession,
+                ...(draftSections.profession?.answers || draftSections.profession),
+              },
+              nominee: draftSections.nominee?.answers || prev.nominee,
+              zakat: {
+                ...prev.zakat,
+                ...(draftSections.zakat?.answers || draftSections.zakat),
+              },
+              fatca: {
+                ...prev.fatca,
+                ...(draftSections.fatca?.answers || draftSections.fatca),
+              },
+              sdd: {
+                ...prev.sdd,
+                ...(draftSections.sdd?.answers || draftSections.sdd),
+              },
+            });
+            if (merged) {
+              try {
+                localStorage.setItem(STORAGE_APP_KEY, JSON.stringify(merged));
+              } catch {}
+            }
+            return merged;
+          });
+        }
+      }).catch(() => {});
+
+      const step = getFirstIncompleteStep(normalized);
       setCurrentStep(step);
       setShowResumeModal(false);
       setSuccessMsg(`Session restored for CNIC ${cnic}. Resuming at ${STEPS_CONFIG.find((s) => s.key === step)?.label || "Identity"}.`);

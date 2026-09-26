@@ -2,8 +2,8 @@ import urllib.request, ssl, json, time
 
 ctx = ssl.create_default_context()
 kyc_headers = {
-    'PYPSX-ORG-API-KEY-ID': 'KYC_IONNYUQYPWYHWWSI',
-    'PYPSX-ORG-API-SECRET-KEY': 'USZIMT3MBVUPO7RTWXWRDNOG34JJ5PL2OHW3E5Y',
+    'PYPSX-ORG-API-KEY-ID': 'KYC_5MSHFYU7Q6YRK7IB',
+    'PYPSX-ORG-API-SECRET-KEY': 'O7FZ7BCI52IAC3CK7SZMSHO5UGWFBBDS4GVTNZY',
     'Content-Type': 'application/json',
     'User-Agent': 'Mozilla/5.0'
 }

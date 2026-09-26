@@ -23,9 +23,9 @@ services:
       - key: KYC_BASE_URL
         value: https://brokerapi.pypsx.com
       - key: KYC_ORG_API_KEY_ID
-        value: KYC_IONNYUQYPWYHWWSI
+        value: KYC_5MSHFYU7Q6YRK7IB
       - key: KYC_ORG_API_SECRET_KEY
-        value: USZIMT3MBVUPO7RTWXWRDNOG34JJ5PL2OHW3E5Y
+        value: O7FZ7BCI52IAC3CK7SZMSHO5UGWFBBDS4GVTNZY
       - key: NEXT_PUBLIC_DEMO_API_MOCK
         value: "false"
 

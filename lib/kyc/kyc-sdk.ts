@@ -77,15 +77,24 @@ export class KycService {
       }),
     });
 
+    let linkedApp: KycApplication | null = null;
     if (app?.id && password) {
       try {
-        await this.linkCredentials(app.id, password);
+        const linkRes = await this.linkCredentials(app.id, password);
+        if (linkRes?.application) {
+          linkedApp = linkRes.application;
+        }
       } catch {
         await this.setCredentials(app.id, password).catch(() => {});
       }
     }
 
-    return app;
+    if (app?.id) {
+      const fullApp = await this.getApplication(app.id).catch(() => null);
+      if (fullApp) return fullApp;
+    }
+
+    return linkedApp || app;
   }
 
   async setCredentials(appId: string, password: string): Promise<void> {
@@ -95,11 +104,17 @@ export class KycService {
     });
   }
 
-  async linkCredentials(appId: string, password: string): Promise<{ ok: boolean }> {
-    return this.request<{ ok: boolean }>(`/applications/${appId}/credentials/link`, {
-      method: "POST",
-      body: JSON.stringify({ password }),
-    });
+  async linkCredentials(
+    appId: string,
+    password: string
+  ): Promise<{ linked: boolean; current_page?: string; status?: string; application?: KycApplication }> {
+    return this.request<{ linked: boolean; current_page?: string; status?: string; application?: KycApplication }>(
+      `/applications/${appId}/credentials/link`,
+      {
+        method: "POST",
+        body: JSON.stringify({ password }),
+      }
+    );
   }
 
   async unlinkCredentials(appId: string, scope?: "retained"): Promise<void> {

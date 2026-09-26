@@ -178,7 +178,7 @@ export function StepReview({ application, password, onUpdateStep, onNavigateStep
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Uploaded Documents:</span>
-              <span className="text-emerald-400 font-bold">{application.documents.filter((d) => d.status === "VALID").length} Verified Files</span>
+              <span className="text-emerald-400 font-bold">{(application.documents || []).filter((d) => d.status === "VALID").length} Verified Files</span>
             </div>
           </div>
         </div>
