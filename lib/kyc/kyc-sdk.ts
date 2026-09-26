@@ -131,10 +131,23 @@ export class KycService {
     });
   }
 
-  async verifyOtp(appId: string, otp: string): Promise<{ job_id: string; step: string; status: string }> {
+  async verifyOtp(
+    appId: string,
+    otpOrPayload: string | { email_otp: string; sms_otp: string; otp?: string }
+  ): Promise<{ job_id: string; step: string; status: string }> {
+    let bodyPayload: any;
+    if (typeof otpOrPayload === "string") {
+      bodyPayload = { email_otp: otpOrPayload, sms_otp: otpOrPayload, otp: otpOrPayload };
+    } else {
+      bodyPayload = {
+        email_otp: otpOrPayload.email_otp,
+        sms_otp: otpOrPayload.sms_otp,
+        otp: otpOrPayload.otp || otpOrPayload.email_otp,
+      };
+    }
     return this.request(`/applications/${appId}/otp`, {
       method: "POST",
-      body: JSON.stringify({ otp }),
+      body: JSON.stringify(bodyPayload),
     });
   }
 

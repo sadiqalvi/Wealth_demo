@@ -165,7 +165,8 @@ export function KycOnboardingView() {
   const [regConfirmPassword, setRegConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [regOtp, setRegOtp] = useState("");
+  const [regEmailOtp, setRegEmailOtp] = useState("");
+  const [regSmsOtp, setRegSmsOtp] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
   const [createdAppId, setCreatedAppId] = useState<string | null>(null);
 
@@ -360,8 +361,15 @@ export function KycOnboardingView() {
     e.preventDefault();
     if (!createdAppId) return;
 
-    if (!regOtp || regOtp.trim().length !== 6) {
-      setErrorMsg("Please enter the complete 6-digit OTP code sent by CDC.");
+    const cleanEmailOtp = regEmailOtp.trim().replace(/[^0-9]/g, "");
+    const cleanSmsOtp = regSmsOtp.trim().replace(/[^0-9]/g, "");
+
+    if (!cleanEmailOtp || cleanEmailOtp.length !== 6) {
+      setErrorMsg("Please enter the complete 6-digit verification code received on your Email.");
+      return;
+    }
+    if (!cleanSmsOtp || cleanSmsOtp.length !== 6) {
+      setErrorMsg("Please enter the complete 6-digit verification code received on your SMS.");
       return;
     }
 
@@ -369,8 +377,11 @@ export function KycOnboardingView() {
     setErrorMsg(null);
 
     try {
-      // 1. Verify OTP with CDC
-      const otpJob = await kycService.verifyOtp(createdAppId, regOtp.trim());
+      // 1. Verify both Email & SMS OTPs with CDC
+      const otpJob = await kycService.verifyOtp(createdAppId, {
+        email_otp: cleanEmailOtp,
+        sms_otp: cleanSmsOtp,
+      });
       if (otpJob?.job_id) {
         await kycService.awaitJob(createdAppId, otpJob.job_id);
       }
@@ -389,9 +400,11 @@ export function KycOnboardingView() {
 
       setShowRegisterModal(false);
       setRegStage("DETAILS");
+      setRegEmailOtp("");
+      setRegSmsOtp("");
       setSuccessMsg("CDC Account successfully created and verified! Proceed with Identity & Biometric checks.");
     } catch (err: any) {
-      setErrorMsg(err.message || "OTP verification failed. Please ensure the code is entered correctly.");
+      setErrorMsg(err.message || "OTP verification failed. Please ensure both codes are entered correctly.");
     } finally {
       setLoading(false);
     }
@@ -1070,23 +1083,50 @@ export function KycOnboardingView() {
             {regStage === "OTP" && (
               <form onSubmit={handleRegisterVerifyOtp} className="space-y-4">
                 <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs space-y-1">
-                  <p className="font-semibold text-white">One-Time Code (OTP) Sent</p>
+                  <p className="font-semibold text-white">CDC Verification Codes Dispatched</p>
                   <p>
-                    Please enter the 6-digit verification code received on your email (<strong>{regEmail}</strong>) or SMS (<strong>{regMobile}</strong>).
+                    CDC sends two separate codes. Enter both the Email code and SMS code below:
                   </p>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">6-Digit CDC OTP Code</label>
-                  <input
-                    type="text"
-                    required
-                    value={regOtp}
-                    onChange={(e) => setRegOtp(e.target.value.replace(/[^0-9]/g, ""))}
-                    placeholder="e.g. 123456"
-                    maxLength={6}
-                    className="w-full px-3.5 py-3 rounded-xl bg-slate-900 border border-slate-800 focus:border-indigo-500 text-white text-base text-center font-mono tracking-widest outline-none transition"
-                  />
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 flex items-center justify-between mb-1">
+                      <span>Code from the email</span>
+                      <span className="text-[10px] text-slate-400 font-normal">{regEmail}</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        value={regEmailOtp}
+                        onChange={(e) => setRegEmailOtp(e.target.value.replace(/[^0-9]/g, ""))}
+                        placeholder="e.g. 123456"
+                        maxLength={6}
+                        className="w-full px-3.5 py-2.5 pl-10 rounded-xl bg-slate-900 border border-slate-800 focus:border-indigo-500 text-white text-base font-mono tracking-widest outline-none transition"
+                      />
+                      <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 flex items-center justify-between mb-1">
+                      <span>Code from the SMS</span>
+                      <span className="text-[10px] text-slate-400 font-normal">{regMobile}</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        value={regSmsOtp}
+                        onChange={(e) => setRegSmsOtp(e.target.value.replace(/[^0-9]/g, ""))}
+                        placeholder="e.g. 654321"
+                        maxLength={6}
+                        className="w-full px-3.5 py-2.5 pl-10 rounded-xl bg-slate-900 border border-slate-800 focus:border-indigo-500 text-white text-base font-mono tracking-widest outline-none transition"
+                      />
+                      <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between text-xs">
@@ -1106,7 +1146,7 @@ export function KycOnboardingView() {
                       resendCooldown > 0 ? "text-slate-500 cursor-not-allowed" : "text-indigo-400 hover:text-indigo-300"
                     }`}
                   >
-                    {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Resend OTP Code"}
+                    {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Resend OTP Codes"}
                   </button>
                 </div>
 
@@ -1117,11 +1157,11 @@ export function KycOnboardingView() {
                 >
                   {loading ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" /> Verifying Code & Creating CDC Account...
+                      <RefreshCw className="w-4 h-4 animate-spin" /> Verifying Codes & Creating CDC Account...
                     </>
                   ) : (
                     <>
-                      <Check className="w-4 h-4" /> Verify Code & Complete Registration
+                      <Check className="w-4 h-4" /> Verify Codes & Complete Registration
                     </>
                   )}
                 </button>
