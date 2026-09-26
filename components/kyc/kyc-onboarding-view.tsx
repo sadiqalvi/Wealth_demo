@@ -78,6 +78,26 @@ export function isPersonalStepComplete(app: KycApplication | null | undefined): 
   );
 }
 
+export function validateCdcPassword(password: string): string | null {
+  if (!password || password.length < 8 || password.length > 16) {
+    return "CDC Password must be between 8 and 16 characters long.";
+  }
+  if (!/[A-Z]/.test(password)) {
+    return "CDC Password must contain at least one uppercase letter (A-Z).";
+  }
+  if (!/[a-z]/.test(password)) {
+    return "CDC Password must contain at least one lowercase letter (a-z).";
+  }
+  const digitMatches = password.match(/[0-9]/g);
+  if (!digitMatches || digitMatches.length < 2) {
+    return "CDC Password must contain at least two digits (0-9).";
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    return "CDC Password must contain at least one special character (e.g. Karachi@2026).";
+  }
+  return null;
+}
+
 export function isProfessionStepComplete(app: KycApplication | null | undefined): boolean {
   if (!app?.profession) return false;
   return Boolean(
@@ -312,8 +332,9 @@ export function KycOnboardingView() {
       setErrorMsg("Please provide a valid 11-digit Pakistani mobile number (e.g. 03001234567).");
       return;
     }
-    if (!regPassword || regPassword.length < 6) {
-      setErrorMsg("Password must be at least 6 characters long.");
+    const pwdErr = validateCdcPassword(regPassword);
+    if (pwdErr) {
+      setErrorMsg(pwdErr);
       return;
     }
     if (regPassword !== regConfirmPassword) {
@@ -1026,7 +1047,7 @@ export function KycOnboardingView() {
                         required
                         value={regPassword}
                         onChange={(e) => setRegPassword(e.target.value)}
-                        placeholder="Minimum 6 characters"
+                        placeholder="e.g. Karachi@2026"
                         className="w-full px-3.5 py-2.5 pr-9 rounded-xl bg-slate-900 border border-slate-800 focus:border-indigo-500 text-white text-xs outline-none transition"
                       />
                       <button
@@ -1059,6 +1080,13 @@ export function KycOnboardingView() {
                       </button>
                     </div>
                   </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 text-[11px] text-slate-400 space-y-1">
+                  <p className="font-semibold text-slate-300">CDC Password Policy (8–16 chars):</p>
+                  <p className="text-[10px] text-slate-400">
+                    Must contain at least 1 uppercase letter, 1 lowercase letter, 2 digits, and 1 special character (e.g. <span className="font-mono text-indigo-300">Karachi@2026</span>).
+                  </p>
                 </div>
 
                 <button
