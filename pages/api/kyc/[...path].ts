@@ -1,8 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
 const KYC_BASE_URL = process.env.KYC_BASE_URL || "https://brokerapi.pypsx.com";
-const KYC_ORG_API_KEY_ID = process.env.KYC_ORG_API_KEY_ID || "KYC_5MSHFYU7Q6YRK7IB";
-const KYC_ORG_API_SECRET_KEY = process.env.KYC_ORG_API_SECRET_KEY || "O7FZ7BCI52IAC3CK7SZMSHO5UGWFBBDS4GVTNZY";
+const KYC_ORG_API_KEY_ID = process.env.KYC_ORG_API_KEY_ID;
+const KYC_ORG_API_SECRET_KEY = process.env.KYC_ORG_API_SECRET_KEY;
 
 export const config = {
   api: {
@@ -29,6 +29,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const queryString = searchParams.toString();
   const targetUrl = `${KYC_BASE_URL}/v1/kyc/${subPath}${queryString ? `?${queryString}` : ""}`;
+
+  if (!KYC_ORG_API_KEY_ID || !KYC_ORG_API_SECRET_KEY) {
+    return res.status(500).json({
+      error: "KYC Configuration Error",
+      detail: "KYC_ORG_API_KEY_ID or KYC_ORG_API_SECRET_KEY is not configured in server environment variables.",
+      code: "PYPSX-CONFIG-MISSING",
+    });
+  }
 
   try {
     const headers: Record<string, string> = {

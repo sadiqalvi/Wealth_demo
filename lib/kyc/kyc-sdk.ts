@@ -4,6 +4,32 @@ export interface KycConfig {
   baseUrl?: string;
 }
 
+export interface ResumeApplicationResult {
+  application: KycApplication;
+  next: "biometric" | "identity" | "form" | "account_type" | "submitted" | string;
+  detail?: string;
+  signInResult?: {
+    ok?: boolean;
+    next?: string;
+    sub_step?: string;
+    warm?: boolean;
+    biometric_verified?: boolean;
+    biometric_status?: string;
+    email_verified?: boolean | string;
+    mobile_verified?: boolean | string;
+    iban_verified?: boolean | string;
+    email_value?: string;
+    mobile_value?: string;
+    iban_value?: string;
+    bank_name?: string;
+    account_title?: string;
+    verified?: string[];
+    to_verify?: string[];
+    detail?: string;
+    [key: string]: any;
+  };
+}
+
 export class KycService {
   private baseUrl: string;
 
@@ -68,7 +94,7 @@ export class KycService {
     return this.request<KycApplication>(`/applications/${appId}`);
   }
 
-  async resumeExistingApplication(cnic: string, password: string): Promise<KycApplication> {
+  async resumeExistingApplication(cnic: string, password: string): Promise<ResumeApplicationResult> {
     const cleanCnic = cnic.replace(/[^0-9]/g, "");
     const app = await this.request<KycApplication>("/applications", {
       method: "POST",
@@ -77,24 +103,34 @@ export class KycService {
       }),
     });
 
-    let linkedApp: KycApplication | null = null;
+    let nextStep = "identity";
+    let detailMsg: string | undefined;
+    let signInResult: any = undefined;
+
     if (app?.id && password) {
-      try {
-        const linkRes = await this.linkCredentials(app.id, password);
-        if (linkRes?.application) {
-          linkedApp = linkRes.application;
+      const linkRes = await this.linkCredentials(app.id, password);
+
+      if (linkRes?.sign_in_job_id) {
+        const jobResult = await this.awaitJob(app.id, linkRes.sign_in_job_id);
+        signInResult = jobResult;
+        if (jobResult?.next) {
+          nextStep = jobResult.next;
         }
-      } catch {
-        await this.setCredentials(app.id, password).catch(() => {});
+        if (jobResult?.detail) {
+          detailMsg = jobResult.detail;
+        }
+      } else if (linkRes?.next) {
+        nextStep = linkRes.next;
       }
     }
 
-    if (app?.id) {
-      const fullApp = await this.getApplication(app.id).catch(() => null);
-      if (fullApp) return fullApp;
-    }
-
-    return linkedApp || app;
+    const fullApp = app?.id ? await this.getApplication(app.id).catch(() => app) : app;
+    return {
+      application: fullApp,
+      next: nextStep,
+      detail: detailMsg,
+      signInResult,
+    };
   }
 
   async setCredentials(appId: string, password: string): Promise<void> {
@@ -107,8 +143,16 @@ export class KycService {
   async linkCredentials(
     appId: string,
     password: string
-  ): Promise<{ linked: boolean; current_page?: string; status?: string; application?: KycApplication }> {
-    return this.request<{ linked: boolean; current_page?: string; status?: string; application?: KycApplication }>(
+  ): Promise<{
+    application_id?: string;
+    linked: boolean;
+    next?: string;
+    sign_in_job_id?: string;
+    current_page?: string;
+    status?: string;
+    application?: KycApplication;
+  }> {
+    return this.request(
       `/applications/${appId}/credentials/link`,
       {
         method: "POST",

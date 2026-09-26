@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { KycApplication, IdentityData, KycStepKey } from "@/lib/kyc/types";
 import {
   ShieldCheck,
+  Fingerprint,
   Mail,
   Smartphone,
   Landmark,
@@ -29,6 +30,7 @@ interface StepIdentityProps {
   onNext: () => void;
   loading: boolean;
   onDraftUpdate?: (data: IdentityData) => void;
+  onOpenBiometric?: () => void;
 }
 
 export const PAKISTANI_BANKS: Record<string, { name: string; type: string; color: string }> = {
@@ -95,7 +97,7 @@ export function formatCgpErrorMessage(rawError: string, context?: "mobile" | "em
   return rawError.replace(/^cgp validation \d+\/[^:]+:\s*/i, "");
 }
 
-export function StepIdentity({ application, password, onUpdateStep, onNext, loading, onDraftUpdate }: StepIdentityProps) {
+export function StepIdentity({ application, password, onUpdateStep, onNext, loading, onDraftUpdate, onOpenBiometric }: StepIdentityProps) {
   const [identity, setIdentity] = useState<IdentityData>({
     ...(application.identity || {}),
     email: application.identity?.email || "",
@@ -219,53 +221,10 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
     return () => clearTimeout(timer);
   }, [identity, relativeCnic, relativeName, declarationAccepted]);
 
-  // Initial Warmup execution on mount
+  // Initial state is primed from sign-in / biometric check; do not call read_state on mount
   useEffect(() => {
-    let isMounted = true;
-    const executeWarmup = async () => {
-      // If already verified, SKIP warmup entirely so user experiences instant load
-      if (
-        identity.biometric_acknowledged &&
-        identity.email_verified &&
-        identity.mobile_verified &&
-        identity.iban_verified
-      ) {
-        setWarmupDone(true);
-        return;
-      }
-      setIsWarmingUp(true);
-      try {
-        const res = await onUpdateStep("identity", { password, sub_step: "read_state" });
-        if (res && isMounted) {
-          setPortalVerified((prev) => {
-            const next = {
-              ...prev,
-              email: res.email_value || prev.email,
-              email_verified: res.email !== undefined ? !!res.email : prev.email_verified,
-              mobile: res.mobile_value || prev.mobile,
-              mobile_verified: res.mobile !== undefined ? !!res.mobile : prev.mobile_verified,
-              iban: res.iban_value || prev.iban,
-              iban_verified: res.iban !== undefined ? !!res.iban : prev.iban_verified,
-            };
-            try {
-              localStorage.setItem(STORAGE_PORTAL_VERIFIED_PREFIX + (application?.id || "default"), JSON.stringify(next));
-            } catch {}
-            return next;
-          });
-        }
-      } catch {
-        // graceful warmup
-      } finally {
-        if (isMounted) {
-          setIsWarmingUp(false);
-          setWarmupDone(true);
-        }
-      }
-    };
-    executeWarmup();
-    return () => {
-      isMounted = false;
-    };
+    setWarmupDone(true);
+    setIsWarmingUp(false);
   }, []);
 
   // Live Bank Resolution based on IBAN input
@@ -342,7 +301,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
         return next;
       });
       setEmailCooldown(30);
-      setSuccessMsg(res?.detail || `6-digit OTP dispatched to ${identity.email} (Hint: enter any 6 digits e.g. 123456)`);
+      setSuccessMsg(res?.detail || `6-digit OTP dispatched to ${identity.email}`);
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to send email OTP.");
     } finally {
@@ -427,7 +386,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
         return next;
       });
       setSmsCooldown(30);
-      setSuccessMsg(res?.detail || `SMS OTP dispatched to ${identity.mobile} (Hint: enter any 6 digits e.g. 654321)`);
+      setSuccessMsg(res?.detail || `SMS OTP dispatched to ${identity.mobile}`);
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to dispatch SMS OTP.");
     } finally {
@@ -878,7 +837,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
         </span>
       </div>
 
-      {/* 1. Biometric Activation Card */}
+      {/* 1. Biometric Status Card */}
       <div className="p-4 rounded-2xl bg-[#0F0F1E] border border-slate-800/80 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -886,28 +845,28 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
               className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                 identity.biometric_acknowledged
                   ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                  : "bg-slate-800 text-slate-400"
+                  : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
               }`}
             >
-              <Sparkles className="w-4 h-4" />
+              <Fingerprint className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-xs font-bold text-white">1. NADRA Biometric Consent & Activation</div>
-              <div className="text-[11px] text-slate-400">Initialize CDC Gateway Portal compliance session</div>
+              <div className="text-xs font-bold text-white">1. NADRA Biometric Verification (CDC Access / Asaan Connect)</div>
+              <div className="text-[11px] text-slate-400">Mobile app fingerprint scan via CDC Access / Asaan Connect</div>
             </div>
           </div>
           {identity.biometric_acknowledged ? (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Acknowledged
+              <CheckCircle2 className="w-3.5 h-3.5" /> Verified
             </span>
           ) : (
             <button
-              onClick={handleAcknowledgeBiometrics}
+              onClick={() => (onOpenBiometric ? onOpenBiometric() : handleAcknowledgeBiometrics())}
               disabled={actionLoading === "biometric"}
-              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
             >
               {actionLoading === "biometric" && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-              Activate Session
+              <span>Verify on Mobile App</span>
             </button>
           )}
         </div>

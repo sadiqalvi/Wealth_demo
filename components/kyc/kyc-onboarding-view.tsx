@@ -6,6 +6,7 @@ export const STORAGE_PORTAL_VERIFIED_KEY = "wealthdemo_kyc_portal_verified_v2";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { kycService } from "@/lib/kyc/kyc-sdk";
 import { KycApplication, KycStepKey, AccountType, DiscrepancyItem } from "@/lib/kyc/types";
+import { StepBiometric } from "./steps/step-biometric";
 import { StepIdentity } from "./steps/step-identity";
 import { StepPersonal } from "./steps/step-personal";
 import { StepProfession } from "./steps/step-profession";
@@ -288,6 +289,8 @@ export function KycOnboardingView() {
   const [regSmsOtp, setRegSmsOtp] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
   const [createdAppId, setCreatedAppId] = useState<string | null>(null);
+  const [showBiometricView, setShowBiometricView] = useState<boolean>(false);
+  const [biometricDetail, setBiometricDetail] = useState<string | null>(null);
 
   // Dynamic brokers list from CDC
   const [brokersList, setBrokersList] = useState<Array<{ value: string; label: string }>>([
@@ -625,11 +628,51 @@ export function KycOnboardingView() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const app = await kycService.resumeExistingApplication(cnic, pass);
-      const normalized = normalizeApplication(app);
+      const resumeRes = await kycService.resumeExistingApplication(cnic, pass);
+      const { application: rawApp, next: routedNext, detail, signInResult } = resumeRes;
+      const normalized = normalizeApplication(rawApp);
       if (!normalized) {
         throw new Error("Failed to load application profile from CDC.");
       }
+
+      // Seed verified identity states directly from sign-in job result without calling read_state
+      if (signInResult) {
+        if (signInResult.email_value) normalized.identity.email = signInResult.email_value;
+        if (signInResult.mobile_value) normalized.identity.mobile = signInResult.mobile_value;
+        if (signInResult.iban_value) normalized.identity.iban = signInResult.iban_value;
+        if (signInResult.bank_name) normalized.identity.bank_name = signInResult.bank_name;
+        if (signInResult.account_title) normalized.identity.account_title = signInResult.account_title;
+
+        const isEmailVerified =
+          signInResult.email_verified === "verified" ||
+          signInResult.email_verified === true ||
+          (Array.isArray(signInResult.verified) && signInResult.verified.includes("email"));
+        const isMobileVerified =
+          signInResult.mobile_verified === "verified" ||
+          signInResult.mobile_verified === true ||
+          (Array.isArray(signInResult.verified) && signInResult.verified.includes("mobile"));
+        const isIbanVerified =
+          signInResult.iban_verified === "verified" ||
+          signInResult.iban_verified === true ||
+          (Array.isArray(signInResult.verified) && signInResult.verified.includes("iban"));
+        const isBioVerified =
+          signInResult.biometric_verified === true ||
+          signInResult.biometric_status === "Verified" ||
+          routedNext !== "biometric";
+
+        normalized.identity.email_verified = isEmailVerified;
+        normalized.identity.mobile_verified = isMobileVerified;
+        normalized.identity.iban_verified = isIbanVerified;
+        normalized.identity.biometric_acknowledged = isBioVerified;
+      }
+
+      if (routedNext === "form") {
+        normalized.identity.email_verified = true;
+        normalized.identity.mobile_verified = true;
+        normalized.identity.iban_verified = true;
+        normalized.identity.biometric_acknowledged = true;
+      }
+
       setApplication(normalized);
       setPortalPassword(pass);
       try {
@@ -681,13 +724,91 @@ export function KycOnboardingView() {
         }
       }).catch(() => {});
 
-      const step = getFirstIncompleteStep(normalized);
-      setCurrentStep(step);
+      // Route based on CDC next state
+      if (routedNext === "biometric") {
+        setShowBiometricView(true);
+        setBiometricDetail(detail || signInResult?.detail || "Download the CDC Access or Asaan Connect app, complete biometric verification there, then come back here and press Proceed.");
+        setCurrentStep("identity");
+      } else if (routedNext === "identity") {
+        setShowBiometricView(false);
+        setCurrentStep("identity");
+      } else if (routedNext === "form") {
+        setShowBiometricView(false);
+        setCurrentStep("personal");
+      } else if (routedNext === "submitted") {
+        setShowBiometricView(false);
+        setCurrentStep("review");
+      } else {
+        setShowBiometricView(false);
+        setCurrentStep(getFirstIncompleteStep(normalized));
+      }
+
       setShowResumeModal(false);
-      setSuccessMsg(`Session restored for CNIC ${cnic}. Resuming at ${STEPS_CONFIG.find((s) => s.key === step)?.label || "Identity"}.`);
+      if (detail || signInResult?.detail) {
+        setSuccessMsg(detail || signInResult?.detail || `Signed in for CNIC ${cnic}`);
+      } else {
+        setSuccessMsg(`Session restored for CNIC ${cnic}`);
+      }
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to sign in. Please verify your CNIC and CDC Password.");
       throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- Biometric Proceed Check ---
+  const handleProceedBiometricCheck = async () => {
+    if (!application) return;
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const bioCheck = await kycService.checkBiometric(application.id);
+      if (bioCheck?.job_id) {
+        const jobResult = await kycService.awaitJob(application.id, bioCheck.job_id);
+
+        if (jobResult?.cleared === true || jobResult?.next === "identity" || jobResult?.next === "form") {
+          setShowBiometricView(false);
+          setApplication((prev) => {
+            if (!prev) return null;
+            const updated = {
+              ...prev,
+              identity: {
+                ...prev.identity,
+                biometric_acknowledged: true,
+                email_verified:
+                  jobResult.email_verified === "verified" ||
+                  jobResult.email_verified === true ||
+                  prev.identity?.email_verified,
+                mobile_verified:
+                  jobResult.mobile_verified === "verified" ||
+                  jobResult.mobile_verified === true ||
+                  prev.identity?.mobile_verified,
+                iban_verified:
+                  jobResult.iban_verified === "verified" ||
+                  jobResult.iban_verified === true ||
+                  prev.identity?.iban_verified,
+              },
+            };
+            try {
+              localStorage.setItem(STORAGE_APP_KEY, JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
+
+          if (jobResult.next === "form") {
+            setCurrentStep("personal");
+          } else {
+            setCurrentStep("identity");
+          }
+          setSuccessMsg(jobResult.detail || "Biometric verified successfully on CDC!");
+        } else {
+          setBiometricDetail(jobResult?.detail || "CDC reports biometric is not yet complete. Please complete the fingerprint scan in the CDC Access or Asaan Connect app and click Proceed again.");
+          setErrorMsg(jobResult?.detail || "Biometric verification is still pending in CDC Access / Asaan Connect app.");
+        }
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to verify biometric status with CDC.");
     } finally {
       setLoading(false);
     }
@@ -1032,7 +1153,15 @@ export function KycOnboardingView() {
 
           {/* Active Step Form View */}
           <div className="p-6 rounded-3xl bg-[#0F0F1E] border border-slate-800 shadow-2xl">
-            {currentStep === "identity" && (
+            {showBiometricView ? (
+              <StepBiometric
+                application={application}
+                detail={biometricDetail}
+                onProceedCheck={handleProceedBiometricCheck}
+                loading={loading}
+                onSkipToIdentity={() => setShowBiometricView(false)}
+              />
+            ) : currentStep === "identity" ? (
               <StepIdentity
                 application={application}
                 password={portalPassword}
@@ -1040,8 +1169,9 @@ export function KycOnboardingView() {
                 onDraftUpdate={(data: any) => handleDraftUpdate("personal", data)}
                 onNext={handleNext}
                 loading={loading}
+                onOpenBiometric={() => setShowBiometricView(true)}
               />
-            )}
+            ) : null}
 
             {currentStep === "personal" && (
               <StepPersonal
