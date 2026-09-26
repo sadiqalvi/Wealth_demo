@@ -13,29 +13,29 @@ interface StepPersonalProps {
 }
 
 export function StepPersonal({ application, password, onUpdateStep, onNext, onBack, loading, onDraftUpdate }: StepPersonalProps) {
-  const [personal, setPersonal] = useState<PersonalData>({
-    salutation: application.personal.salutation || "MR",
-    full_name: application.personal.full_name || "",
-    father_husband_relationship: application.personal.father_husband_relationship || "FATHER",
-    father_husband_name: application.personal.father_husband_name || "",
-    cnic_doc_type: application.personal.cnic_doc_type || "smartid",
-    country_of_birth: application.personal.country_of_birth || "PAK",
-    date_of_birth: application.personal.date_of_birth || "1990-01-01",
-    gender: application.personal.gender || "M",
-    marital_status: application.personal.marital_status || "1",
-    place_of_birth: application.personal.place_of_birth || "KARACHI",
-  });
+  const [personal, setPersonal] = useState<PersonalData>(() => ({
+    salutation: application.personal?.salutation || "MR",
+    full_name: application.personal?.full_name || "",
+    father_husband_relationship: application.personal?.father_husband_relationship || "FATHER",
+    father_husband_name: application.personal?.father_husband_name || "",
+    cnic_doc_type: application.personal?.cnic_doc_type || "smartid",
+    country_of_birth: application.personal?.country_of_birth || "PAK",
+    date_of_birth: application.personal?.date_of_birth || "1990-01-01",
+    gender: application.personal?.gender || "M",
+    marital_status: application.personal?.marital_status || "1",
+    place_of_birth: application.personal?.place_of_birth || "KARACHI",
+  }));
 
-  const [address, setAddress] = useState<AddressData>({
-    permanent_address: application.address.permanent_address || "",
-    permanent_city: application.address.permanent_city || "KARACHI",
-    permanent_country: application.address.permanent_country || "PAK",
-    resident_status: application.address.resident_status || "7",
-    mailing_differs: application.address.mailing_differs || false,
-    mailing_address: application.address.mailing_address || "",
-    mailing_city: application.address.mailing_city || "",
-    mailing_country: application.address.mailing_country || "PAK",
-  });
+  const [address, setAddress] = useState<AddressData>(() => ({
+    permanent_address: application.address?.permanent_address || "",
+    permanent_city: application.address?.permanent_city || "KARACHI",
+    permanent_country: application.address?.permanent_country || "PAK",
+    resident_status: application.address?.resident_status || "7",
+    mailing_differs: Boolean(application.address?.mailing_differs),
+    mailing_address: application.address?.mailing_address || "",
+    mailing_city: application.address?.mailing_city || "",
+    mailing_country: application.address?.mailing_country || "PAK",
+  }));
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const lastAppIdRef = useRef(application.id);

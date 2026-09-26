@@ -13,13 +13,13 @@ interface StepSddProps {
 }
 
 export function StepSdd({ application, password, onUpdateStep, onNext, onBack, loading, onDraftUpdate }: StepSddProps) {
-  const [sdd, setSdd] = useState<SddData>({
-    is_pep: application.sdd.is_pep || false,
-    account_open_refused: application.sdd.account_open_refused || false,
-    offshore_tax_links: application.sdd.offshore_tax_links || false,
-    deals_precious_items: application.sdd.deals_precious_items || false,
-    is_dual_national: application.sdd.is_dual_national || false,
-  });
+  const [sdd, setSdd] = useState<SddData>(() => ({
+    is_pep: application.sdd?.is_pep || false,
+    account_open_refused: application.sdd?.account_open_refused || false,
+    offshore_tax_links: application.sdd?.offshore_tax_links || false,
+    deals_precious_items: application.sdd?.deals_precious_items || false,
+    is_dual_national: application.sdd?.is_dual_national || false,
+  }));
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 

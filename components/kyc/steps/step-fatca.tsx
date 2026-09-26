@@ -14,11 +14,11 @@ interface StepFatcaProps {
 
 export function StepFatca({ application, password, onUpdateStep, onNext, onBack, loading, onDraftUpdate }: StepFatcaProps) {
   const [fatca, setFatca] = useState<FatcaData>({
-    is_usa_person: application.fatca.is_usa_person || false,
-    born_in_usa: application.fatca.born_in_usa || false,
-    usa_mail_address: application.fatca.usa_mail_address || false,
-    tax_residence_country: application.fatca.tax_residence_country || "PAK",
-    tin: application.fatca.tin || application.cnic || "",
+    is_usa_person: Boolean(application.fatca?.is_usa_person),
+    born_in_usa: Boolean(application.fatca?.born_in_usa),
+    usa_mail_address: Boolean(application.fatca?.usa_mail_address),
+    tax_residence_country: application.fatca?.tax_residence_country || "PAK",
+    tin: application.fatca?.tin || application.cnic || "",
   });
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);

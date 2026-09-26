@@ -33,6 +33,8 @@ export interface KycApplication {
   scans_today_count: number;
   created_at: string;
   updated_at: string;
+  broker_code?: string;
+  broker_name?: string;
   
   // Data blocks
   identity: IdentityData;

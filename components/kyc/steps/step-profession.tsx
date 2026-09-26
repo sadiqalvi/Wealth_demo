@@ -13,18 +13,18 @@ interface StepProfessionProps {
 }
 
 export function StepProfession({ application, password, onUpdateStep, onNext, onBack, loading, onDraftUpdate }: StepProfessionProps) {
-  const [profession, setProfession] = useState<ProfessionData>({
-    source_of_income: application.profession.source_of_income || "P001",
-    gross_annual_income: application.profession.gross_annual_income || "J01",
-    profession_industry: application.profession.profession_industry || "Information Technology",
-    industry_other: application.profession.industry_other || "",
-    employer_or_business_name: application.profession.employer_or_business_name || "Tech Corp",
-    job_title: application.profession.job_title || "Software Engineer",
-    department: application.profession.department || "Engineering",
-    employer_address: application.profession.employer_address || "Shahrah-e-Faisal",
-    employer_city: application.profession.employer_city || "KARACHI",
-    employer_country: application.profession.employer_country || "PAK",
-  });
+  const [profession, setProfession] = useState<ProfessionData>(() => ({
+    source_of_income: application.profession?.source_of_income || "P001",
+    gross_annual_income: application.profession?.gross_annual_income || "J01",
+    profession_industry: application.profession?.profession_industry || "Information Technology",
+    industry_other: application.profession?.industry_other || "",
+    employer_or_business_name: application.profession?.employer_or_business_name || "Tech Corp",
+    job_title: application.profession?.job_title || "Software Engineer",
+    department: application.profession?.department || "Engineering",
+    employer_address: application.profession?.employer_address || "Shahrah-e-Faisal",
+    employer_city: application.profession?.employer_city || "KARACHI",
+    employer_country: application.profession?.employer_country || "PAK",
+  }));
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const lastAppIdRef = useRef(application.id);

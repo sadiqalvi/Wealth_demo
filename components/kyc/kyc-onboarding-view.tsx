@@ -54,6 +54,100 @@ const STEPS_CONFIG: Array<{ key: KycStepKey; page: string; label: string; number
   { key: "declaration", page: "86", label: "Declaration", number: 10 },
 ];
 
+export function normalizeApplication(app: Partial<KycApplication> | null | undefined): KycApplication | null {
+  if (!app || !app.id) return null;
+  return {
+    id: app.id,
+    cnic: app.cnic || "",
+    status: app.status || "IN_PROGRESS",
+    account_type: app.account_type || "NOR",
+    broker_code: (app as any).broker_code || "00208",
+    broker_name: (app as any).broker_name || "ALPHA CAPITAL (PRIVATE) LIMITED",
+    current_page: app.current_page || "",
+    current_step: (app.current_step as KycStepKey) || "identity",
+    last_error: app.last_error,
+    scans_today_count: app.scans_today_count || 0,
+    created_at: app.created_at || new Date().toISOString(),
+    updated_at: app.updated_at || new Date().toISOString(),
+    discrepancy_flag: Boolean(app.discrepancy_flag),
+    discrepancies: app.discrepancies || [],
+    identity: {
+      email: app.identity?.email || "",
+      email_verified: Boolean(app.identity?.email_verified),
+      email_otp_sent: Boolean(app.identity?.email_otp_sent),
+      mobile: app.identity?.mobile || "",
+      mobile_verified: Boolean(app.identity?.mobile_verified),
+      mobile_otp_sent: Boolean(app.identity?.mobile_otp_sent),
+      mobile_owner_type: app.identity?.mobile_owner_type || "Self",
+      iban: app.identity?.iban || "",
+      iban_verified: Boolean(app.identity?.iban_verified),
+      bank_name: app.identity?.bank_name || "",
+      account_title: app.identity?.account_title || "",
+      biometric_acknowledged: Boolean(app.identity?.biometric_acknowledged),
+      ...app.identity,
+    },
+    personal: {
+      salutation: app.personal?.salutation || "MR",
+      full_name: app.personal?.full_name || "",
+      father_husband_relationship: app.personal?.father_husband_relationship || "FATHER",
+      father_husband_name: app.personal?.father_husband_name || "",
+      cnic_doc_type: app.personal?.cnic_doc_type || "smartid",
+      country_of_birth: app.personal?.country_of_birth || "PAK",
+      date_of_birth: app.personal?.date_of_birth || "",
+      gender: app.personal?.gender || "M",
+      marital_status: app.personal?.marital_status || "1",
+      place_of_birth: app.personal?.place_of_birth || "KARACHI",
+      ...app.personal,
+    },
+    address: {
+      permanent_address: app.address?.permanent_address || "",
+      permanent_city: app.address?.permanent_city || "KARACHI",
+      permanent_country: app.address?.permanent_country || "PAK",
+      resident_status: app.address?.resident_status || "7",
+      mailing_differs: Boolean(app.address?.mailing_differs),
+      mailing_address: app.address?.mailing_address || "",
+      mailing_city: app.address?.mailing_city || "",
+      mailing_country: app.address?.mailing_country || "PAK",
+      ...app.address,
+    },
+    profession: {
+      source_of_income: app.profession?.source_of_income || "P001",
+      gross_annual_income: app.profession?.gross_annual_income || "J03",
+      profession_industry: app.profession?.profession_industry || "Information Technology",
+      industry_other: app.profession?.industry_other || "",
+      employer_or_business_name: app.profession?.employer_or_business_name || "",
+      job_title: app.profession?.job_title || "",
+      department: app.profession?.department || "",
+      employer_address: app.profession?.employer_address || "",
+      employer_city: app.profession?.employer_city || "KARACHI",
+      employer_country: app.profession?.employer_country || "PAK",
+      ...app.profession,
+    },
+    nominee: app.nominee ? { ...app.nominee } : null,
+    zakat: {
+      status: (app.zakat?.status as "5" | "6" | "7") || "5",
+      ...app.zakat,
+    },
+    fatca: {
+      tax_residence_country: app.fatca?.tax_residence_country || "PAK",
+      tin: app.fatca?.tin || app.cnic || "",
+      is_usa_person: Boolean(app.fatca?.is_usa_person),
+      born_in_usa: Boolean(app.fatca?.born_in_usa),
+      usa_mail_address: Boolean(app.fatca?.usa_mail_address),
+      ...app.fatca,
+    },
+    sdd: {
+      is_pep: Boolean(app.sdd?.is_pep),
+      account_open_refused: Boolean(app.sdd?.account_open_refused),
+      offshore_tax_links: Boolean(app.sdd?.offshore_tax_links),
+      deals_precious_items: Boolean(app.sdd?.deals_precious_items),
+      is_dual_national: Boolean(app.sdd?.is_dual_national),
+      ...app.sdd,
+    },
+    documents: app.documents || [],
+  };
+}
+
 export function isIdentityStepComplete(app: KycApplication | null | undefined): boolean {
   if (!app?.identity) return false;
   return Boolean(
@@ -122,6 +216,7 @@ export function isNomineeStepComplete(app: KycApplication | null | undefined): b
     const pastNomineeSteps: KycStepKey[] = ["sdd", "zakat", "documents", "review", "declaration"];
     return pastNomineeSteps.includes(app.current_step);
   }
+  if (!app.nominee) return false;
   return Boolean(
     app.nominee.name?.trim() &&
     app.nominee.cnic_or_passport?.trim() &&
@@ -212,67 +307,72 @@ export function KycOnboardingView() {
   // Restore application from storage
   useEffect(() => {
     try {
-      const savedApp = localStorage.getItem(STORAGE_APP_KEY);
+      const savedAppStr = localStorage.getItem(STORAGE_APP_KEY);
       const savedStep = localStorage.getItem(STORAGE_STEP_KEY);
       const savedPwd = localStorage.getItem(STORAGE_PWD_KEY);
 
       if (savedPwd) setPortalPassword(savedPwd);
 
-      if (savedApp) {
-        const parsedApp: KycApplication = JSON.parse(savedApp);
-        setApplication(parsedApp);
+      if (savedAppStr) {
+        const rawApp = JSON.parse(savedAppStr);
+        const parsedApp = normalizeApplication(rawApp);
+        if (parsedApp) {
+          setApplication(parsedApp);
 
-        // Fetch latest application state AND draft from server to preserve all inputs
-        Promise.all([
-          kycService.getApplication(parsedApp.id).catch(() => null),
-          kycService.getDraft(parsedApp.id).catch(() => null),
-        ]).then(([serverApp, draft]) => {
-          if (serverApp && serverApp.id) {
-            const draftSections = draft?.sections || {};
-            const mergedApp: KycApplication = {
-              ...parsedApp,
-              ...serverApp,
-              personal: {
-                ...parsedApp.personal,
-                ...serverApp.personal,
-                ...(draftSections.personal?.personal || draftSections.personal),
-              },
-              address: {
-                ...parsedApp.address,
-                ...serverApp.address,
-                ...(draftSections.personal?.address || draftSections.address),
-              },
-              profession: {
-                ...parsedApp.profession,
-                ...serverApp.profession,
-                ...(draftSections.profession?.answers || draftSections.profession),
-              },
-              nominee: draftSections.nominee?.answers || parsedApp.nominee || serverApp.nominee,
-              zakat: {
-                ...parsedApp.zakat,
-                ...serverApp.zakat,
-                ...(draftSections.zakat?.answers || draftSections.zakat),
-              },
-              fatca: {
-                ...parsedApp.fatca,
-                ...serverApp.fatca,
-                ...(draftSections.fatca?.answers || draftSections.fatca),
-              },
-              sdd: {
-                ...parsedApp.sdd,
-                ...serverApp.sdd,
-                ...(draftSections.sdd?.answers || draftSections.sdd),
-              },
-            };
-            setApplication(mergedApp);
-            localStorage.setItem(STORAGE_APP_KEY, JSON.stringify(mergedApp));
+          // Fetch latest application state AND draft from server to preserve all inputs
+          Promise.all([
+            kycService.getApplication(parsedApp.id).catch(() => null),
+            kycService.getDraft(parsedApp.id).catch(() => null),
+          ]).then(([serverApp, draft]) => {
+            if (serverApp && serverApp.id) {
+              const draftSections = draft?.sections || {};
+              const merged = normalizeApplication({
+                ...parsedApp,
+                ...serverApp,
+                personal: {
+                  ...parsedApp.personal,
+                  ...serverApp.personal,
+                  ...(draftSections.personal?.personal || draftSections.personal),
+                },
+                address: {
+                  ...parsedApp.address,
+                  ...serverApp.address,
+                  ...(draftSections.personal?.address || draftSections.address),
+                },
+                profession: {
+                  ...parsedApp.profession,
+                  ...serverApp.profession,
+                  ...(draftSections.profession?.answers || draftSections.profession),
+                },
+                nominee: draftSections.nominee?.answers || parsedApp.nominee || serverApp.nominee,
+                zakat: {
+                  ...parsedApp.zakat,
+                  ...serverApp.zakat,
+                  ...(draftSections.zakat?.answers || draftSections.zakat),
+                },
+                fatca: {
+                  ...parsedApp.fatca,
+                  ...serverApp.fatca,
+                  ...(draftSections.fatca?.answers || draftSections.fatca),
+                },
+                sdd: {
+                  ...parsedApp.sdd,
+                  ...serverApp.sdd,
+                  ...(draftSections.sdd?.answers || draftSections.sdd),
+                },
+              });
+              if (merged) {
+                setApplication(merged);
+                localStorage.setItem(STORAGE_APP_KEY, JSON.stringify(merged));
+              }
+            }
+          });
+
+          if (savedStep) {
+            setCurrentStep(savedStep as KycStepKey);
+          } else {
+            setCurrentStep(getFirstIncompleteStep(parsedApp));
           }
-        });
-
-        if (savedStep) {
-          setCurrentStep(savedStep as KycStepKey);
-        } else {
-          setCurrentStep(getFirstIncompleteStep(parsedApp));
         }
       }
     } catch {}

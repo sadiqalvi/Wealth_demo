@@ -13,9 +13,9 @@ interface StepZakatProps {
 }
 
 export function StepZakat({ application, password, onUpdateStep, onNext, onBack, loading, onDraftUpdate }: StepZakatProps) {
-  const [zakat, setZakat] = useState<ZakatData>({
-    status: application.zakat.status || "5",
-  });
+  const [zakat, setZakat] = useState<ZakatData>(() => ({
+    status: application.zakat?.status || "5",
+  }));
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 

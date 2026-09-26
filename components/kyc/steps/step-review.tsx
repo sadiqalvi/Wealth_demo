@@ -64,23 +64,23 @@ export function StepReview({ application, password, onUpdateStep, onNavigateStep
           <div className="text-xs text-slate-300 space-y-1.5">
             <div className="flex justify-between">
               <span className="text-slate-500">Applicant CNIC:</span>
-              <span className="font-mono font-bold text-white">{application.cnic}</span>
+              <span className="font-mono font-bold text-white">{application.cnic || "—"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Email Address:</span>
-              <span className="font-mono text-emerald-400">{application.identity.email}</span>
+              <span className="font-mono text-emerald-400">{application.identity?.email || "—"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Mobile Phone:</span>
-              <span className="font-mono text-emerald-400">{application.identity.mobile} ({application.identity.mobile_owner_type})</span>
+              <span className="font-mono text-emerald-400">{application.identity?.mobile || "—"} ({application.identity?.mobile_owner_type || "Self"})</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">IBAN / Bank:</span>
-              <span className="font-mono text-white text-[11px]">{application.identity.iban}</span>
+              <span className="font-mono text-white text-[11px]">{application.identity?.iban || "—"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Resolved Bank:</span>
-              <span className="text-slate-200 font-semibold">{application.identity.bank_name || "Meezan Bank Limited"}</span>
+              <span className="text-slate-200 font-semibold">{application.identity?.bank_name || "Meezan Bank Limited"}</span>
             </div>
           </div>
         </div>
@@ -102,19 +102,19 @@ export function StepReview({ application, password, onUpdateStep, onNavigateStep
           <div className="text-xs text-slate-300 space-y-1.5">
             <div className="flex justify-between">
               <span className="text-slate-500">Full Name:</span>
-              <span className="font-bold text-white">{application.personal.salutation} {application.personal.full_name}</span>
+              <span className="font-bold text-white">{application.personal?.salutation || ""} {application.personal?.full_name || "—"}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">{application.personal.father_husband_relationship} Name:</span>
-              <span className="text-slate-200">{application.personal.father_husband_name}</span>
+              <span className="text-slate-500">{application.personal?.father_husband_relationship || "Father"} Name:</span>
+              <span className="text-slate-200">{application.personal?.father_husband_name || "—"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Date of Birth:</span>
-              <span className="text-slate-200 font-mono">{application.personal.date_of_birth}</span>
+              <span className="text-slate-200 font-mono">{application.personal?.date_of_birth || "—"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Permanent Address:</span>
-              <span className="text-slate-200 text-right truncate max-w-[200px]">{application.address.permanent_address}, {application.address.permanent_city}</span>
+              <span className="text-slate-200 text-right truncate max-w-[200px]">{application.address?.permanent_address || "—"}, {application.address?.permanent_city || ""}</span>
             </div>
           </div>
         </div>
@@ -136,19 +136,19 @@ export function StepReview({ application, password, onUpdateStep, onNavigateStep
           <div className="text-xs text-slate-300 space-y-1.5">
             <div className="flex justify-between">
               <span className="text-slate-500">Employer / Business:</span>
-              <span className="font-semibold text-white">{application.profession.employer_or_business_name} ({application.profession.job_title})</span>
+              <span className="font-semibold text-white">{application.profession?.employer_or_business_name || "—"} ({application.profession?.job_title || "—"})</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Annual Income Band:</span>
-              <span className="text-slate-200 font-mono">{application.profession.gross_annual_income}</span>
+              <span className="text-slate-200 font-mono">{application.profession?.gross_annual_income || "—"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">FATCA US Person:</span>
-              <span className="text-slate-200">{application.fatca.is_usa_person ? "Yes" : "No"}</span>
+              <span className="text-slate-200">{application.fatca?.is_usa_person ? "Yes" : "No"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Tax TIN / NTN:</span>
-              <span className="text-slate-200 font-mono">{application.fatca.tin}</span>
+              <span className="text-slate-200 font-mono">{application.fatca?.tin || "—"}</span>
             </div>
           </div>
         </div>
@@ -170,11 +170,11 @@ export function StepReview({ application, password, onUpdateStep, onNavigateStep
           <div className="text-xs text-slate-300 space-y-1.5">
             <div className="flex justify-between">
               <span className="text-slate-500">Nominee:</span>
-              <span className="text-slate-200">{application.nominee ? `${application.nominee.name} (${application.nominee.relation})` : "Opted Out"}</span>
+              <span className="text-slate-200">{application.nominee ? `${application.nominee?.name} (${application.nominee?.relation})` : "Opted Out"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Zakat Status:</span>
-              <span className="text-slate-200 font-semibold">{application.zakat.status === "5" ? "Muslim Deductible (5)" : application.zakat.status === "6" ? "CZ-50 Exempt (6)" : "Non-Muslim (7)"}</span>
+              <span className="text-slate-200 font-semibold">{application.zakat?.status === "5" ? "Muslim Deductible (5)" : application.zakat?.status === "6" ? "CZ-50 Exempt (6)" : "Non-Muslim (7)"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Uploaded Documents:</span>
