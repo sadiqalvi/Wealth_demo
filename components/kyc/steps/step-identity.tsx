@@ -639,6 +639,23 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
 
   // Main Save & Proceed Button Click Handler
   const handleProceedClick = async () => {
+    if (!identity.biometric_verified) {
+      setErrorMsg("NADRA Biometric verification is not complete yet. Please verify on the CDC Access / Asaan Connect app first.");
+      if (onOpenBiometric) onOpenBiometric();
+      return;
+    }
+    if (!identity.email_verified || isEditingEmail) {
+      setErrorMsg("Please complete Email OTP verification before proceeding.");
+      return;
+    }
+    if (!identity.mobile_verified || isEditingMobile) {
+      setErrorMsg("Please complete Mobile PTA SIM OTP verification before proceeding.");
+      return;
+    }
+    if (!identity.iban_verified || isEditingIban) {
+      setErrorMsg("Please complete 1-Link IBAN bank verification before proceeding.");
+      return;
+    }
     // If there is any conflict or unverified fields while portal has verified, prompt user!
     if (hasAnyConflict || !isReadyForNext) {
       openConflictModal();
@@ -676,11 +693,11 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
     onNext();
   };
 
-  const isReadyForNext =
-    identity.biometric_acknowledged &&
-    identity.email_verified &&
-    identity.mobile_verified &&
-    identity.iban_verified;
+  const isBioVerified = Boolean(identity.biometric_verified);
+  const isEmailDone = isBioVerified && Boolean(identity.email_verified) && !isEditingEmail;
+  const isMobileDone = isEmailDone && Boolean(identity.mobile_verified) && !isEditingMobile;
+  const isIbanDone = isMobileDone && Boolean(identity.iban_verified) && !isEditingIban;
+  const isReadyForNext = isBioVerified && Boolean(identity.email_verified) && Boolean(identity.mobile_verified) && Boolean(identity.iban_verified);
 
   if (isWarmingUp && !warmupDone) {
     return (
@@ -839,41 +856,58 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
 
       {/* 1. Biometric Status Card */}
       <div className="p-4 rounded-2xl bg-[#0F0F1E] border border-slate-800/80 space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div
-              className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                identity.biometric_acknowledged
+              className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                identity.biometric_verified
                   ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                  : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                  : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
               }`}
             >
-              <Fingerprint className="w-4 h-4" />
+              <Fingerprint className="w-5 h-5" />
             </div>
             <div>
               <div className="text-xs font-bold text-white">1. NADRA Biometric Verification (CDC Access / Asaan Connect)</div>
               <div className="text-[11px] text-slate-400">Mobile app fingerprint scan via CDC Access / Asaan Connect</div>
             </div>
           </div>
-          {identity.biometric_acknowledged ? (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Verified
+          {identity.biometric_verified ? (
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Biometric Verified
             </span>
           ) : (
-            <button
-              onClick={() => (onOpenBiometric ? onOpenBiometric() : handleAcknowledgeBiometrics())}
-              disabled={actionLoading === "biometric"}
-              className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
-            >
-              {actionLoading === "biometric" && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-              <span>Verify on Mobile App</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                <AlertCircle className="w-3.5 h-3.5" /> Pending Verification
+              </span>
+              <button
+                type="button"
+                onClick={() => (onOpenBiometric ? onOpenBiometric() : handleAcknowledgeBiometrics())}
+                disabled={actionLoading === "biometric"}
+                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
+              >
+                {actionLoading === "biometric" && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>Open Biometric Guide</span>
+              </button>
+            </div>
           )}
         </div>
+
+        {!identity.biometric_verified && (
+          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-start gap-2">
+            <Lock className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+            <p className="text-[11px] leading-relaxed">
+              <strong>Biometric required first:</strong> Email, mobile PTA SIM, and 1-Link IBAN stages below stay locked until CDC confirms your biometric verification on the CDC Access / Asaan Connect app.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* 2. Email 2FA Relay Card */}
-      <div className="p-4 rounded-2xl bg-[#0F0F1E] border border-slate-800/80 space-y-3">
+      <div className={`p-4 rounded-2xl bg-[#0F0F1E] border border-slate-800/80 space-y-3 ${
+        !identity.biometric_verified ? "opacity-60" : ""
+      }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
@@ -892,25 +926,34 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
           </div>
 
           <div className="flex items-center gap-2">
-            {identity.email_verified && !isEditingEmail && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Verified
+            {!identity.biometric_verified ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                <Lock className="w-3 h-3" /> Locked
               </span>
-            )}
-
-            {identity.email_verified && !isEditingEmail && (
-              <button
-                type="button"
-                onClick={() => requestChangeConfirmation("email")}
-                className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition flex items-center gap-1"
-              >
-                <Edit2 className="w-3 h-3" /> Change / Re-verify
-              </button>
-            )}
+            ) : identity.email_verified && !isEditingEmail ? (
+              <>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Verified
+                </span>
+                <button
+                  type="button"
+                  onClick={() => requestChangeConfirmation("email")}
+                  className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition flex items-center gap-1"
+                >
+                  <Edit2 className="w-3 h-3" /> Change / Re-verify
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
 
-        {/* Display Verified Email View */}
+        {!identity.biometric_verified && (
+          <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-amber-400/90 flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
+            <span>Locked — Complete Stage 1 (NADRA Biometric Verification) above first.</span>
+          </div>
+        )}
+
         {identity.email_verified && !isEditingEmail && (
           <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between text-xs">
             <span className="text-slate-400">Registered Email:</span>
@@ -918,7 +961,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
           </div>
         )}
 
-                {emailError && (
+        {emailError && (
           <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start justify-between gap-2.5 animate-in fade-in">
             <div className="flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
@@ -938,7 +981,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
         )}
 
         {/* Edit / Verify Email Input Form */}
-        {(!identity.email_verified || isEditingEmail) && (
+        {identity.biometric_verified && (!identity.email_verified || isEditingEmail) && (
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2">
             <div className="sm:col-span-8">
               <input
@@ -993,7 +1036,9 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
       </div>
 
       {/* 3. Mobile Number & PTA SIM Ownership Card */}
-      <div className="p-4 rounded-2xl bg-[#0F0F1E] border border-slate-800/80 space-y-3">
+      <div className={`p-4 rounded-2xl bg-[#0F0F1E] border border-slate-800/80 space-y-3 ${
+        !identity.biometric_verified || !identity.email_verified || isEditingEmail ? "opacity-60" : ""
+      }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
@@ -1012,33 +1057,46 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
           </div>
 
           <div className="flex items-center gap-2">
-            {identity.mobile_verified && !isEditingMobile && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Verified ({identity.mobile_owner_type})
+            {!identity.biometric_verified || !identity.email_verified || isEditingEmail ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                <Lock className="w-3 h-3" /> Locked
               </span>
-            )}
-
-            {identity.mobile_verified && !isEditingMobile && (
-              <button
-                type="button"
-                onClick={() => requestChangeConfirmation("mobile")}
-                className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition flex items-center gap-1"
-              >
-                <Edit2 className="w-3 h-3" /> Change / Re-verify
-              </button>
-            )}
+            ) : identity.mobile_verified && !isEditingMobile ? (
+              <>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Verified ({identity.mobile_owner_type})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => requestChangeConfirmation("mobile")}
+                  className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition flex items-center gap-1"
+                >
+                  <Edit2 className="w-3 h-3" /> Change / Re-verify
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
 
-        {/* Display Verified Mobile View */}
-        {identity.mobile_verified && !isEditingMobile && (
+        {(!identity.biometric_verified || !identity.email_verified || isEditingEmail) && (
+          <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-amber-400/90 flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
+            <span>
+              {!identity.biometric_verified
+                ? "Locked — Complete Stage 1 (Biometric Verification) first."
+                : "Locked — Complete Stage 2 (Email OTP Verification) first."}
+            </span>
+          </div>
+        )}
+
+        {identity.biometric_verified && identity.email_verified && !isEditingEmail && identity.mobile_verified && !isEditingMobile && (
           <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between text-xs">
             <span className="text-slate-400">Registered Phone ({identity.mobile_owner_type}):</span>
             <span className="font-mono text-emerald-400 font-bold">{identity.mobile}</span>
           </div>
         )}
 
-                {mobileError && (
+        {mobileError && (
           <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start justify-between gap-2.5 animate-in fade-in">
             <div className="flex items-start gap-2.5">
               <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
@@ -1058,9 +1116,8 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
         )}
 
         {/* Edit / Verify Mobile Input Form */}
-        {(!identity.mobile_verified || isEditingMobile) && (
+        {identity.biometric_verified && identity.email_verified && !isEditingEmail && (!identity.mobile_verified || isEditingMobile) && (
           <div className="space-y-3 pt-2">
-            {/* Mobile Number & Ownership Select Row */}
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
               <div className="sm:col-span-5">
                 <label className="text-[10px] text-slate-400 block mb-1 font-semibold">Mobile Number Belongs To</label>
@@ -1112,7 +1169,6 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
               </div>
             </div>
 
-            {/* Conditional Fields for Non-Self SIM Ownership */}
             {isFamilyOwner && (
               <div className="p-3.5 rounded-xl bg-indigo-950/20 border border-indigo-500/30 space-y-3 animate-in fade-in">
                 <div className="flex items-center gap-2 text-xs font-bold text-indigo-300">
@@ -1143,78 +1199,69 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
                       type="text"
                       value={relativeName}
                       onChange={(e) => { setMobileError(null); setRelativeName(e.target.value); }}
-                      placeholder="Full name as printed on relative's CNIC"
+                      placeholder="Name as printed on CNIC"
                       className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder:text-slate-500 outline-none focus:border-indigo-500"
                     />
                   </div>
                 </div>
 
-                {/* Authorization / Declaration Checkbox */}
-                <div className="pt-1 flex items-start gap-2.5">
-                  <input
-                    type="checkbox"
-                    id="mobile_family_decl"
-                    checked={declarationAccepted}
-                    onChange={(e) => { setMobileError(null); setDeclarationAccepted(e.target.checked); }}
-                    className="mt-1 w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                  />
-                  <label htmlFor="mobile_family_decl" className="text-[11px] text-slate-300 leading-relaxed cursor-pointer">
-                    I have read, understood and agreed to the{" "}
-                    <span className="text-indigo-400 underline font-semibold">
-                      Authorization / Declaration for the purpose of provisioning of mobile number of close family member
-                    </span>.
+                <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800/80 space-y-2">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={declarationAccepted}
+                      onChange={(e) => setDeclarationAccepted(e.target.checked)}
+                      className="mt-1 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-slate-800"
+                    />
+                    <span className="text-[11px] text-slate-300 leading-relaxed select-none">
+                      I hereby authorize and declare that this mobile SIM belongs to my close relative (
+                      <span className="text-indigo-400 font-semibold">{identity.mobile_owner_type}</span>
+                      ) and is authorized to receive regulatory transaction alerts and OTPs from the Central Depository Company (CDC).
+                    </span>
                   </label>
                 </div>
               </div>
             )}
 
             {isBusinessOwner && (
-              <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/30 space-y-3 animate-in fade-in">
-                <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
-                  <Building2 className="w-4 h-4 text-amber-400" />
-                  <span>Corporate / Business SIM Provisioning Details</span>
+              <div className="p-3.5 rounded-xl bg-indigo-950/20 border border-indigo-500/30 space-y-2 animate-in fade-in">
+                <div className="flex items-center gap-2 text-xs font-bold text-indigo-300">
+                  <Building2 className="w-4 h-4 text-indigo-400" />
+                  <span>Corporate Entity / Employer Provisioning</span>
                 </div>
-
                 <div>
                   <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                    Company / Entity Name <span className="text-rose-400">*</span>
+                    Company / Registered Business Name <span className="text-rose-400">*</span>
                   </label>
                   <input
                     type="text"
                     value={relativeName}
-                    onChange={(e) => setRelativeName(e.target.value)}
-                    placeholder="Registered Company / Corporate entity name"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder:text-slate-500 outline-none focus:border-amber-500"
+                    onChange={(e) => { setMobileError(null); setRelativeName(e.target.value); }}
+                    placeholder="e.g. Systems Limited / Habib Bank Ltd"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder:text-slate-500 outline-none focus:border-indigo-500"
                   />
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Document Required:</strong> Submission of Declaration on Company’s letterhead in the Documents section (Step 8) will be required.
-                  </span>
                 </div>
               </div>
             )}
 
-            {/* OTP Input Row */}
             {identity.mobile_otp_sent && (
-              <div className="flex gap-2 pt-1 animate-in fade-in">
+              <div className="flex gap-2 pt-1">
                 <input
                   type="text"
                   maxLength={6}
                   value={smsOtpInput}
                   onChange={(e) => setSmsOtpInput(e.target.value)}
-                  placeholder="Enter 6-digit SMS OTP code (e.g. 654321)"
+                  placeholder="Enter 6-digit SMS OTP (e.g. 654321)"
                   className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-indigo-500/50 text-xs font-mono text-indigo-300 placeholder:text-slate-600 outline-none"
                 />
                 <button
+                  type="button"
                   onClick={handleVerifySmsOtp}
                   disabled={actionLoading === "sms_verify"}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1"
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1 shadow-md shadow-indigo-600/20"
                 >
                   {actionLoading === "sms_verify" && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                  Verify OTP
+                  Verify SIM OTP
                 </button>
               </div>
             )}
@@ -1222,8 +1269,10 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
         )}
       </div>
 
-      {/* 4. Bank Account & 1-Link IBAN Resolution Card */}
-      <div className="p-4 rounded-2xl bg-[#0F0F1E] border border-slate-800/80 space-y-3">
+      {/* 4. Bank Account IBAN Resolution Card */}
+      <div className={`p-4 rounded-2xl bg-[#0F0F1E] border border-slate-800/80 space-y-3 ${
+        !identity.biometric_verified || !identity.email_verified || isEditingEmail || !identity.mobile_verified || isEditingMobile ? "opacity-60" : ""
+      }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
@@ -1236,54 +1285,73 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
               <Landmark className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-xs font-bold text-white">4. Bank Account Title Resolution (1-Link IBAN)</div>
-              <div className="text-[11px] text-slate-400">Direct 1-IBFT title lookup and Raast verification</div>
+              <div className="text-xs font-bold text-white">4. Pakistani Bank Account (1-Link IBAN Resolution)</div>
+              <div className="text-[11px] text-slate-400">1-IBFT account title resolution via 1-Link RAAST Switch</div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {identity.iban_verified && !isEditingIban && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Verified
+            {!identity.biometric_verified || !identity.email_verified || isEditingEmail || !identity.mobile_verified || isEditingMobile ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                <Lock className="w-3 h-3" /> Locked
               </span>
-            )}
-
-            {identity.iban_verified && !isEditingIban && (
-              <button
-                type="button"
-                onClick={() => requestChangeConfirmation("iban")}
-                className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition flex items-center gap-1"
-              >
-                <Edit2 className="w-3 h-3" /> Change / Re-verify
-              </button>
-            )}
+            ) : identity.iban_verified && !isEditingIban ? (
+              <>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> 1-Link Resolved
+                </span>
+                <button
+                  type="button"
+                  onClick={() => requestChangeConfirmation("iban")}
+                  className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition flex items-center gap-1"
+                >
+                  <Edit2 className="w-3 h-3" /> Change / Re-verify
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
 
-        {/* Display Verified IBAN View */}
-        {identity.iban_verified && !isEditingIban && (
-          <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2 text-xs">
-            <div className="flex justify-between">
-              <span className="text-slate-400">Resolved Bank:</span>
-              <span className="text-white font-bold">{identity.bank_name || "—"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Account Title:</span>
-              <span className="text-white font-bold">{identity.account_title || application.personal?.full_name || "—"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Pakistani IBAN:</span>
-              <span className="font-mono text-emerald-400 font-bold">{identity.iban}</span>
-            </div>
+        {(!identity.biometric_verified || !identity.email_verified || isEditingEmail || !identity.mobile_verified || isEditingMobile) && (
+          <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-amber-400/90 flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
+            <span>
+              {!identity.biometric_verified
+                ? "Locked — Complete Stage 1 (Biometric Verification) first."
+                : !identity.email_verified || isEditingEmail
+                ? "Locked — Complete Stage 2 (Email OTP Verification) first."
+                : "Locked — Complete Stage 3 (Mobile PTA SIM Verification) first."}
+            </span>
           </div>
         )}
 
-                {ibanError && (
-          <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start justify-between gap-2.5 animate-in fade-in">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
-              <div className="space-y-0.5">
-                <span className="font-bold text-rose-200 block text-xs">IBAN Resolution Error</span>
+        {identity.biometric_verified && identity.email_verified && !isEditingEmail && identity.mobile_verified && !isEditingMobile && identity.iban_verified && !isEditingIban && (
+          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">IBAN:</span>
+              <span className="font-mono text-emerald-400 font-bold">{identity.iban}</span>
+            </div>
+            {identity.bank_name && (
+              <div className="flex items-center justify-between border-t border-slate-800 pt-1.5">
+                <span className="text-slate-400">Resolved Bank:</span>
+                <span className="text-white font-semibold">{identity.bank_name}</span>
+              </div>
+            )}
+            {identity.account_title && (
+              <div className="flex items-center justify-between border-t border-slate-800 pt-1.5">
+                <span className="text-slate-400">Account Title:</span>
+                <span className="text-indigo-300 font-semibold">{identity.account_title}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {ibanError && (
+          <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start justify-between gap-2.5 animate-in fade-in">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-bold text-rose-200 block text-xs">IBAN 1-Link Resolution Failed</span>
                 <p className="text-[11px] leading-relaxed text-rose-300">{ibanError}</p>
               </div>
             </div>
@@ -1298,7 +1366,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
         )}
 
         {/* Edit / Verify IBAN Input Form */}
-        {(!identity.iban_verified || isEditingIban) && (
+        {identity.biometric_verified && identity.email_verified && !isEditingEmail && identity.mobile_verified && !isEditingMobile && (!identity.iban_verified || isEditingIban) && (
           <div className="space-y-3 pt-2">
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
               <div className="sm:col-span-9">

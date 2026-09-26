@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { KycApplication } from "@/lib/kyc/types";
 import {
   Fingerprint,
@@ -7,13 +7,13 @@ import {
   AlertCircle,
   RefreshCw,
   ArrowRight,
-  ShieldCheck,
   ExternalLink,
-  QrCode,
-  Sparkles,
   Lock,
   Mail,
   Phone,
+  ShieldCheck,
+  QrCode,
+  Info,
 } from "lucide-react";
 
 interface StepBiometricProps {
@@ -21,7 +21,6 @@ interface StepBiometricProps {
   detail?: string | null;
   onProceedCheck: () => Promise<void>;
   loading: boolean;
-  onSkipToIdentity?: () => void;
 }
 
 export function StepBiometric({
@@ -29,10 +28,7 @@ export function StepBiometric({
   detail,
   onProceedCheck,
   loading,
-  onSkipToIdentity,
 }: StepBiometricProps) {
-  const [activeTab, setActiveTab] = useState<"instructions" | "faq">("instructions");
-
   const emailVerified = Boolean(application?.identity?.email_verified);
   const mobileVerified = Boolean(application?.identity?.mobile_verified);
 
@@ -46,7 +42,7 @@ export function StepBiometric({
           </div>
           <div>
             <h2 className="text-lg font-bold text-white">
-              NADRA Biometric Verification (Asaan Connect / CDC Access)
+              NADRA Biometric Verification (CDC Access / Asaan Connect)
             </h2>
             <p className="text-xs text-slate-400">
               Complete your biometric fingerprint scan on the CDC Access or Asaan Connect mobile app.
@@ -55,33 +51,34 @@ export function StepBiometric({
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            Awaiting Mobile Biometric
+          <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5" />
+            Biometric Required (CDC: Not Verified)
           </span>
         </div>
       </div>
 
       {/* CDC Detail Alert / Feedback Box */}
-      {detail ? (
-        <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-indigo-200 text-xs flex items-start gap-3 shadow-lg">
-          <Sparkles className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <strong className="text-white font-bold block text-xs">CDC Gateway Status:</strong>
-            <p className="text-xs leading-relaxed text-indigo-200/90">{detail}</p>
-          </div>
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/40 via-slate-900 to-indigo-950/40 border border-rose-500/30 text-rose-200 text-xs flex items-start gap-3 shadow-lg">
+        <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <strong className="text-white font-bold block text-xs">
+            CDC Central Gateway Notice:
+          </strong>
+          <p className="text-xs leading-relaxed text-slate-200">
+            {detail ||
+              "Your biometric verification is not complete yet (CDC: Not Verified). Download the CDC Access app, complete the biometric verification there, then come back here and press Proceed. Email, mobile and bank account (IBAN) verification stay locked until CDC confirms the biometric."}
+          </p>
         </div>
-      ) : (
-        <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-indigo-200 text-xs flex items-start gap-3 shadow-lg">
-          <AlertCircle className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <strong className="text-white font-bold block text-xs">CDC Gateway Notice:</strong>
-            <p className="text-xs leading-relaxed text-indigo-200/90">
-              Download the <strong>CDC Access</strong> or <strong>Asaan Connect</strong> mobile app, complete the biometric verification there, then come back here and press <strong>Proceed</strong>.
-            </p>
-          </div>
-        </div>
-      )}
+      </div>
+
+      {/* Sequential Lock Notice Banner */}
+      <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center gap-3">
+        <Lock className="w-4 h-4 text-amber-400 flex-shrink-0" />
+        <p className="text-xs leading-relaxed">
+          <strong>Step 1 is currently locked:</strong> Subsequent steps (Email verification, Mobile PTA SIM verification, 1-Link IBAN resolution, and Personal info) remain off-limits until CDC confirms your biometric scan.
+        </p>
+      </div>
 
       {/* Verified Status Banner */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -93,23 +90,27 @@ export function StepBiometric({
               <div className="text-xs font-mono font-bold text-white">{application.cnic}</div>
             </div>
           </div>
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
+            Primary Key
+          </span>
         </div>
 
         <div className="p-3.5 rounded-2xl bg-[#0B0B16] border border-slate-800/80 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Mail className="w-4 h-4 text-slate-400" />
             <div>
-              <div className="text-[10px] text-slate-500">Email Verification</div>
+              <div className="text-[10px] text-slate-500">Email Status</div>
               <div className="text-xs font-semibold text-white">
-                {emailVerified ? "Verified with CDC" : "Pending OTP"}
+                {emailVerified ? "Saved on CDC" : "Locked (Pending Biometric)"}
               </div>
             </div>
           </div>
           {emailVerified ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-semibold flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" /> Ready
+            </span>
           ) : (
-            <span className="text-[10px] text-slate-500">Step 1</span>
+            <Lock className="w-3.5 h-3.5 text-slate-600" />
           )}
         </div>
 
@@ -117,68 +118,106 @@ export function StepBiometric({
           <div className="flex items-center gap-2.5">
             <Phone className="w-4 h-4 text-slate-400" />
             <div>
-              <div className="text-[10px] text-slate-500">Mobile PTA SIM</div>
+              <div className="text-[10px] text-slate-500">Mobile Status</div>
               <div className="text-xs font-semibold text-white">
-                {mobileVerified ? "Verified with CDC" : "Pending OTP"}
+                {mobileVerified ? "Saved on CDC" : "Locked (Pending Biometric)"}
               </div>
             </div>
           </div>
           {mobileVerified ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-semibold flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" /> Ready
+            </span>
           ) : (
-            <span className="text-[10px] text-slate-500">Step 1</span>
+            <Lock className="w-3.5 h-3.5 text-slate-600" />
           )}
         </div>
       </div>
 
-      {/* Main Instruction Steps Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Step 1 */}
-        <div className="p-5 rounded-2xl bg-[#0F0F23] border border-slate-800 space-y-3 relative overflow-hidden">
-          <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-bold text-xs flex items-center justify-center">
-            1
-          </div>
-          <h3 className="text-sm font-bold text-white">Download CDC Access App</h3>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Install the official <strong>CDC Access</strong> or <strong>Asaan Connect</strong> app from Google Play Store or Apple App Store on your smartphone.
-          </p>
-          <div className="pt-2 flex flex-wrap gap-2">
-            <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-medium text-slate-300">
-              Android Play Store
-            </span>
-            <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-medium text-slate-300">
-              Apple App Store
-            </span>
-          </div>
+      {/* Main Download & Verification Instructions */}
+      <div className="p-6 rounded-3xl bg-[#0F0F23] border border-slate-800 space-y-6">
+        <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
+          <Smartphone className="w-5 h-5 text-indigo-400" />
+          <h3 className="text-sm font-bold text-white">
+            Where and How to Complete Biometric Verification:
+          </h3>
         </div>
 
-        {/* Step 2 */}
-        <div className="p-5 rounded-2xl bg-[#0F0F23] border border-slate-800 space-y-3">
-          <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-bold text-xs flex items-center justify-center">
-            2
-          </div>
-          <h3 className="text-sm font-bold text-white">Scan Your Fingerprints</h3>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Open the app, enter your 13-digit CNIC (<span className="font-mono text-indigo-300">{application.cnic}</span>), and follow the on-screen camera prompts to capture your NADRA biometric scan.
-          </p>
-          <div className="p-2 rounded-lg bg-slate-900/80 text-[11px] text-indigo-300 flex items-center gap-2">
-            <Smartphone className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>Ensure good lighting and clean camera lens</span>
-          </div>
-        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Card 1: Download Apps */}
+          <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-400 text-xs font-bold flex items-center justify-center">
+                1
+              </div>
+              <h4 className="text-xs font-bold text-white">Download CDC Access / Asaan Connect</h4>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Install the official <strong>CDC Access</strong> app by Central Depository Company of Pakistan or the <strong>Asaan Connect</strong> app on your smartphone.
+              </p>
+            </div>
 
-        {/* Step 3 */}
-        <div className="p-5 rounded-2xl bg-[#0F0F23] border border-slate-800 space-y-3">
-          <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs flex items-center justify-center">
-            3
+            <div className="pt-3 space-y-2 border-t border-slate-800/80">
+              <a
+                href="https://play.google.com/store/apps/details?id=com.cdc.access"
+                target="_blank"
+                rel="noreferrer"
+                className="w-full px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold transition flex items-center justify-between"
+              >
+                <span>Google Play Store (Android)</span>
+                <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
+              </a>
+              <a
+                href="https://apps.apple.com/app/cdc-access/id1527773228"
+                target="_blank"
+                rel="noreferrer"
+                className="w-full px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold transition flex items-center justify-between"
+              >
+                <span>Apple App Store (iOS)</span>
+                <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
+              </a>
+            </div>
           </div>
-          <h3 className="text-sm font-bold text-white">Click Proceed Below</h3>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Once you see the confirmation screen in the mobile app, come back here and click the <strong>Proceed</strong> button below to sync your verified status.
-          </p>
-          <div className="p-2 rounded-lg bg-emerald-500/10 text-[11px] text-emerald-300 flex items-center gap-2">
-            <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>Instant sync with CDC Oracle Gateway</span>
+
+          {/* Card 2: Perform Fingerprint Scan */}
+          <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-400 text-xs font-bold flex items-center justify-center">
+                2
+              </div>
+              <h4 className="text-xs font-bold text-white">Log in & Scan Fingerprints</h4>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Open the app and log in with your CNIC (<span className="font-mono text-indigo-300 font-bold">{application.cnic}</span>) and your CDC Portal password.
+              </p>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Select <strong>Biometric Verification</strong> and scan your 4 fingers / thumb using your phone camera against a plain background with good lighting.
+              </p>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-[11px] text-indigo-300 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+              <span>Direct NADRA Verisys Integration</span>
+            </div>
+          </div>
+
+          {/* Card 3: Sync & Proceed */}
+          <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center justify-center">
+                3
+              </div>
+              <h4 className="text-xs font-bold text-white">Press Proceed Below</h4>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Once the mobile app displays your biometric confirmation, come back here and press the <strong>Proceed & Verify Biometrics</strong> button below.
+              </p>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Our gateway will poll CDC Oracle servers to verify your NADRA clearance and immediately unlock your onboarding form.
+              </p>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+              <span>Calls /biometric/check API</span>
+            </div>
           </div>
         </div>
       </div>
@@ -186,13 +225,15 @@ export function StepBiometric({
       {/* Action CTA Box */}
       <div className="p-6 rounded-3xl bg-gradient-to-r from-[#0F0F28] via-[#121232] to-[#0F0F28] border border-indigo-500/30 text-center space-y-4 shadow-2xl">
         <div className="max-w-md mx-auto space-y-1">
-          <h3 className="text-base font-bold text-white">Ready to confirm biometric verification?</h3>
+          <h3 className="text-base font-bold text-white">
+            Have you completed the biometric scan in CDC Access app?
+          </h3>
           <p className="text-xs text-slate-400">
-            Click Proceed to verify your biometric status with CDC servers.
+            Click Proceed to check clearance with CDC and unlock the next steps.
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+        <div className="flex items-center justify-center">
           <button
             type="button"
             onClick={onProceedCheck}
@@ -202,7 +243,7 @@ export function StepBiometric({
             {loading ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Checking Biometric Status with CDC...</span>
+                <span>Checking Biometric Status with CDC Gateway...</span>
               </>
             ) : (
               <>
@@ -212,16 +253,6 @@ export function StepBiometric({
               </>
             )}
           </button>
-
-          {onSkipToIdentity && (
-            <button
-              type="button"
-              onClick={onSkipToIdentity}
-              className="px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 text-xs font-semibold transition"
-            >
-              Continue to Identity Form
-            </button>
-          )}
         </div>
       </div>
     </div>

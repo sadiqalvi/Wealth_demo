@@ -55,6 +55,8 @@ export interface KycApplication {
 
 export interface IdentityData {
   biometric_acknowledged: boolean;
+  biometric_verified?: boolean;
+  biometric_status?: string;
   email: string;
   email_verified: boolean;
   email_otp_sent: boolean;

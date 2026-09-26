@@ -85,6 +85,8 @@ export function normalizeApplication(app: Partial<KycApplication> | null | undef
       bank_name: app.identity?.bank_name || "",
       account_title: app.identity?.account_title || "",
       biometric_acknowledged: Boolean(app.identity?.biometric_acknowledged),
+      biometric_verified: Boolean(app.identity?.biometric_verified),
+      biometric_status: app.identity?.biometric_status || (app.identity?.biometric_verified ? "Verified" : "Not Verified"),
       ...app.identity,
     },
     personal: {
@@ -152,7 +154,7 @@ export function normalizeApplication(app: Partial<KycApplication> | null | undef
 export function isIdentityStepComplete(app: KycApplication | null | undefined): boolean {
   if (!app?.identity) return false;
   return Boolean(
-    app.identity.biometric_acknowledged &&
+    app.identity.biometric_verified &&
     app.identity.email_verified &&
     app.identity.email &&
     app.identity.mobile_verified &&
@@ -243,6 +245,20 @@ export function isDocumentsStepComplete(app: KycApplication | null | undefined):
   const hasBack = app.documents.some((d) => d.kind === "cnic_back" && d.status !== "REJECTED");
   const hasSig = app.documents.some((d) => d.kind === "signature" && d.status !== "REJECTED");
   return hasFront && hasBack && hasSig;
+}
+
+export function isStepAccessible(stepKey: KycStepKey, app: KycApplication | null | undefined): boolean {
+  if (!app) return stepKey === "identity";
+  if (stepKey === "identity") return true;
+  if (stepKey === "personal") return isIdentityStepComplete(app);
+  if (stepKey === "profession") return isIdentityStepComplete(app) && isPersonalStepComplete(app);
+  if (stepKey === "fatca") return isIdentityStepComplete(app) && isPersonalStepComplete(app) && isProfessionStepComplete(app);
+  if (stepKey === "nominee") return isIdentityStepComplete(app) && isPersonalStepComplete(app) && isProfessionStepComplete(app) && isFatcaStepComplete(app);
+  if (stepKey === "sdd") return isIdentityStepComplete(app) && isPersonalStepComplete(app) && isProfessionStepComplete(app) && isFatcaStepComplete(app) && isNomineeStepComplete(app);
+  if (stepKey === "zakat") return isIdentityStepComplete(app) && isPersonalStepComplete(app) && isProfessionStepComplete(app) && isFatcaStepComplete(app) && isNomineeStepComplete(app) && isSddStepComplete(app);
+  if (stepKey === "documents") return isIdentityStepComplete(app) && isPersonalStepComplete(app) && isProfessionStepComplete(app) && isFatcaStepComplete(app) && isNomineeStepComplete(app) && isSddStepComplete(app) && isZakatStepComplete(app);
+  if (stepKey === "review" || stepKey === "declaration") return isIdentityStepComplete(app) && isPersonalStepComplete(app) && isProfessionStepComplete(app) && isFatcaStepComplete(app) && isNomineeStepComplete(app) && isSddStepComplete(app) && isZakatStepComplete(app) && isDocumentsStepComplete(app);
+  return false;
 }
 
 export function getFirstIncompleteStep(app: KycApplication | null | undefined): KycStepKey {
@@ -635,13 +651,17 @@ export function KycOnboardingView() {
         throw new Error("Failed to load application profile from CDC.");
       }
 
-      // Seed verified identity states directly from sign-in job result without calling read_state
+      // Seed verified identity states directly from sign-in job result
       if (signInResult) {
         if (signInResult.email_value) normalized.identity.email = signInResult.email_value;
         if (signInResult.mobile_value) normalized.identity.mobile = signInResult.mobile_value;
         if (signInResult.iban_value) normalized.identity.iban = signInResult.iban_value;
         if (signInResult.bank_name) normalized.identity.bank_name = signInResult.bank_name;
         if (signInResult.account_title) normalized.identity.account_title = signInResult.account_title;
+
+        const isBioVerified =
+          signInResult.biometric_verified === true ||
+          signInResult.biometric_status === "Verified";
 
         const isEmailVerified =
           signInResult.email_verified === "verified" ||
@@ -655,22 +675,21 @@ export function KycOnboardingView() {
           signInResult.iban_verified === "verified" ||
           signInResult.iban_verified === true ||
           (Array.isArray(signInResult.verified) && signInResult.verified.includes("iban"));
-        const isBioVerified =
-          signInResult.biometric_verified === true ||
-          signInResult.biometric_status === "Verified" ||
-          routedNext !== "biometric";
 
+        normalized.identity.biometric_verified = isBioVerified;
+        normalized.identity.biometric_acknowledged = isBioVerified;
+        normalized.identity.biometric_status = signInResult.biometric_status || (isBioVerified ? "Verified" : "Not Verified");
         normalized.identity.email_verified = isEmailVerified;
         normalized.identity.mobile_verified = isMobileVerified;
         normalized.identity.iban_verified = isIbanVerified;
-        normalized.identity.biometric_acknowledged = isBioVerified;
       }
 
       if (routedNext === "form") {
+        normalized.identity.biometric_verified = true;
+        normalized.identity.biometric_acknowledged = true;
         normalized.identity.email_verified = true;
         normalized.identity.mobile_verified = true;
         normalized.identity.iban_verified = true;
-        normalized.identity.biometric_acknowledged = true;
       }
 
       setApplication(normalized);
@@ -680,54 +699,14 @@ export function KycOnboardingView() {
         localStorage.setItem(STORAGE_PWD_KEY, pass);
       } catch {}
 
-      // Fetch draft in background to merge any saved form inputs
-      kycService.getDraft(normalized.id).then((draft) => {
-        if (draft?.sections) {
-          const draftSections = draft.sections;
-          setApplication((prev) => {
-            if (!prev) return null;
-            const merged = normalizeApplication({
-              ...prev,
-              personal: {
-                ...prev.personal,
-                ...(draftSections.personal?.personal || draftSections.personal),
-              },
-              address: {
-                ...prev.address,
-                ...(draftSections.personal?.address || draftSections.address),
-              },
-              profession: {
-                ...prev.profession,
-                ...(draftSections.profession?.answers || draftSections.profession),
-              },
-              nominee: draftSections.nominee?.answers || prev.nominee,
-              zakat: {
-                ...prev.zakat,
-                ...(draftSections.zakat?.answers || draftSections.zakat),
-              },
-              fatca: {
-                ...prev.fatca,
-                ...(draftSections.fatca?.answers || draftSections.fatca),
-              },
-              sdd: {
-                ...prev.sdd,
-                ...(draftSections.sdd?.answers || draftSections.sdd),
-              },
-            });
-            if (merged) {
-              try {
-                localStorage.setItem(STORAGE_APP_KEY, JSON.stringify(merged));
-              } catch {}
-            }
-            return merged;
-          });
-        }
-      }).catch(() => {});
-
       // Route based on CDC next state
-      if (routedNext === "biometric") {
+      if (routedNext === "biometric" || (!normalized.identity.biometric_verified && routedNext !== "form" && routedNext !== "submitted")) {
         setShowBiometricView(true);
-        setBiometricDetail(detail || signInResult?.detail || "Download the CDC Access or Asaan Connect app, complete biometric verification there, then come back here and press Proceed.");
+        setBiometricDetail(
+          detail ||
+            signInResult?.detail ||
+            "Your biometric verification is not complete yet (CDC: Not Verified). Download the CDC Access app, complete the biometric verification there, then come back here and press Proceed. Email, mobile and bank account (IBAN) verification stay locked until CDC confirms the biometric."
+        );
         setCurrentStep("identity");
       } else if (routedNext === "identity") {
         setShowBiometricView(false);
@@ -739,7 +718,7 @@ export function KycOnboardingView() {
         setShowBiometricView(false);
         setCurrentStep("review");
       } else {
-        setShowBiometricView(false);
+        setShowBiometricView(!normalized.identity.biometric_verified);
         setCurrentStep(getFirstIncompleteStep(normalized));
       }
 
@@ -775,7 +754,9 @@ export function KycOnboardingView() {
               ...prev,
               identity: {
                 ...prev.identity,
+                biometric_verified: true,
                 biometric_acknowledged: true,
+                biometric_status: "Verified",
                 email_verified:
                   jobResult.email_verified === "verified" ||
                   jobResult.email_verified === true ||
@@ -801,10 +782,13 @@ export function KycOnboardingView() {
           } else {
             setCurrentStep("identity");
           }
-          setSuccessMsg(jobResult.detail || "Biometric verified successfully on CDC!");
+          setSuccessMsg(jobResult.detail || "NADRA Biometric verified successfully on CDC! Identity stages unlocked.");
         } else {
-          setBiometricDetail(jobResult?.detail || "CDC reports biometric is not yet complete. Please complete the fingerprint scan in the CDC Access or Asaan Connect app and click Proceed again.");
-          setErrorMsg(jobResult?.detail || "Biometric verification is still pending in CDC Access / Asaan Connect app.");
+          setBiometricDetail(
+            jobResult?.detail ||
+              "CDC reports biometric is not yet verified (CDC: Not Verified). Please complete fingerprint verification in the CDC Access or Asaan Connect app, then click Proceed."
+          );
+          setErrorMsg(jobResult?.detail || "Biometric verification is still pending on CDC. Please complete the scan on your phone.");
         }
       }
     } catch (err: any) {
@@ -1119,17 +1103,27 @@ export function KycOnboardingView() {
                 {STEPS_CONFIG.map((step, idx) => {
                   const isActive = currentStep === step.key;
                   const isCompleted = idx < currentStepIdx;
+                  const isAccessible = isStepAccessible(step.key, application);
 
                   return (
                     <button
                       key={step.key}
-                      onClick={() => handleSelectStep(step.key)}
+                      disabled={!isAccessible}
+                      onClick={() => {
+                        if (isAccessible) {
+                          handleSelectStep(step.key);
+                        } else {
+                          setErrorMsg(`Please complete ${STEPS_CONFIG[currentStepIdx]?.label || "the current step"} before advancing.`);
+                        }
+                      }}
                       className={`flex items-center gap-2 py-1.5 px-2.5 rounded-xl transition text-left ${
                         isActive
                           ? "bg-indigo-600/20 border border-indigo-500/50 text-white"
                           : isCompleted
                           ? "text-emerald-400 hover:bg-slate-900"
-                          : "text-slate-500 hover:bg-slate-900 hover:text-slate-400"
+                          : isAccessible
+                          ? "text-slate-400 hover:bg-slate-900 hover:text-slate-300"
+                          : "text-slate-600 opacity-40 cursor-not-allowed"
                       }`}
                     >
                       <div
@@ -1138,10 +1132,12 @@ export function KycOnboardingView() {
                             ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                             : isCompleted
                             ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                            : "bg-slate-900 text-slate-500 border border-slate-800"
+                            : isAccessible
+                            ? "bg-slate-900 text-slate-400 border border-slate-800"
+                            : "bg-slate-950 text-slate-600 border border-slate-900"
                         }`}
                       >
-                        {isCompleted ? <Check className="w-3.5 h-3.5" /> : step.number}
+                        {isCompleted ? <Check className="w-3.5 h-3.5" /> : !isAccessible ? <Lock className="w-3 h-3" /> : step.number}
                       </div>
                       <span className="text-xs font-semibold whitespace-nowrap">{step.label}</span>
                     </button>
@@ -1159,7 +1155,6 @@ export function KycOnboardingView() {
                 detail={biometricDetail}
                 onProceedCheck={handleProceedBiometricCheck}
                 loading={loading}
-                onSkipToIdentity={() => setShowBiometricView(false)}
               />
             ) : currentStep === "identity" ? (
               <StepIdentity
