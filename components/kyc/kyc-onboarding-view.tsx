@@ -222,15 +222,52 @@ export function KycOnboardingView() {
         const parsedApp: KycApplication = JSON.parse(savedApp);
         setApplication(parsedApp);
 
-        kycService
-          .getApplication(parsedApp.id)
-          .then((serverApp) => {
-            if (serverApp && serverApp.id) {
-              setApplication(serverApp);
-              localStorage.setItem(STORAGE_APP_KEY, JSON.stringify(serverApp));
-            }
-          })
-          .catch(() => {});
+        // Fetch latest application state AND draft from server to preserve all inputs
+        Promise.all([
+          kycService.getApplication(parsedApp.id).catch(() => null),
+          kycService.getDraft(parsedApp.id).catch(() => null),
+        ]).then(([serverApp, draft]) => {
+          if (serverApp && serverApp.id) {
+            const draftSections = draft?.sections || {};
+            const mergedApp: KycApplication = {
+              ...parsedApp,
+              ...serverApp,
+              personal: {
+                ...parsedApp.personal,
+                ...serverApp.personal,
+                ...(draftSections.personal?.personal || draftSections.personal),
+              },
+              address: {
+                ...parsedApp.address,
+                ...serverApp.address,
+                ...(draftSections.personal?.address || draftSections.address),
+              },
+              profession: {
+                ...parsedApp.profession,
+                ...serverApp.profession,
+                ...(draftSections.profession?.answers || draftSections.profession),
+              },
+              nominee: draftSections.nominee?.answers || parsedApp.nominee || serverApp.nominee,
+              zakat: {
+                ...parsedApp.zakat,
+                ...serverApp.zakat,
+                ...(draftSections.zakat?.answers || draftSections.zakat),
+              },
+              fatca: {
+                ...parsedApp.fatca,
+                ...serverApp.fatca,
+                ...(draftSections.fatca?.answers || draftSections.fatca),
+              },
+              sdd: {
+                ...parsedApp.sdd,
+                ...serverApp.sdd,
+                ...(draftSections.sdd?.answers || draftSections.sdd),
+              },
+            };
+            setApplication(mergedApp);
+            localStorage.setItem(STORAGE_APP_KEY, JSON.stringify(mergedApp));
+          }
+        });
 
         if (savedStep) {
           setCurrentStep(savedStep as KycStepKey);
@@ -355,21 +392,43 @@ export function KycOnboardingView() {
       kycService.warm(appId).catch(() => {});
 
       // 3. Register Identity (Email + Mobile)
-      const idJob = await kycService.registerIdentity(appId, regEmail.trim(), regMobile.trim());
-      if (idJob?.job_id) {
-        await kycService.awaitJob(appId, idJob.job_id);
+      try {
+        const idJob = await kycService.registerIdentity(appId, regEmail.trim(), regMobile.trim());
+        if (idJob?.job_id) {
+          await kycService.awaitJob(appId, idJob.job_id);
+        }
+      } catch (idErr: any) {
+        const idMsg = (idErr?.message || "").toLowerCase();
+        if (
+          !idMsg.includes("already") &&
+          !idMsg.includes("past") &&
+          !idMsg.includes("awaiting")
+        ) {
+          throw idErr;
+        }
       }
 
       // 4. Set Password -> CDC immediately sends OTP code
-      const pwdJob = await kycService.registerPassword(appId, regPassword);
-      if (pwdJob?.job_id) {
-        await kycService.awaitJob(appId, pwdJob.job_id);
+      try {
+        const pwdJob = await kycService.registerPassword(appId, regPassword);
+        if (pwdJob?.job_id) {
+          await kycService.awaitJob(appId, pwdJob.job_id);
+        }
+      } catch (pwdErr: any) {
+        const pwdMsg = (pwdErr?.message || "").toLowerCase();
+        if (
+          !pwdMsg.includes("already") &&
+          !pwdMsg.includes("past") &&
+          !pwdMsg.includes("awaiting")
+        ) {
+          throw pwdErr;
+        }
       }
 
       // Transition to OTP section
       setRegStage("OTP");
       setResendCooldown(30); // 30s CDC cooldown
-      setSuccessMsg(`CDC has sent a 6-digit one-time code to ${regEmail} and ${regMobile}.`);
+      setSuccessMsg(`CDC has sent the verification codes to ${regEmail} and ${regMobile}.`);
     } catch (err: any) {
       setErrorMsg(err.message || "CDC registration request failed.");
     } finally {

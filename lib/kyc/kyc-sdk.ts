@@ -262,9 +262,22 @@ export class KycService {
 
   // --- 5. Draft Sections & Documents ---
   async saveDraftSection(appId: string, section: string, payload: any): Promise<{ ok: boolean; section: string }> {
+    let formattedBody: any;
+    if (section === "personal") {
+      formattedBody = {
+        personal: payload.personal || payload,
+        address: payload.address || payload,
+      };
+    } else {
+      formattedBody =
+        payload && typeof payload === "object" && "answers" in payload
+          ? payload
+          : { answers: payload };
+    }
+
     return this.request(`/applications/${appId}/draft/${section}`, {
       method: "PUT",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(formattedBody),
     });
   }
 
