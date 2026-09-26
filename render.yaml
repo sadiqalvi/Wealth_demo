@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: wealth-demo-app
+    env: node
+    plan: free
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: wealth-fintech-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PYPSX_BASE_URL
+        value: https://brokerapi.pypsx.com
+      - key: PYPSX_ORG_API_KEY_ID
+        value: PYPSX-SANDBOX-PYPSXOFFICIA-9B452FCA794F
+      - key: PYPSX_ORG_API_SECRET_KEY
+        value: YjtgSOYjpA0httBX5xSne6TVIu1XgYRabk1YvWVYAJI
+      - key: KYC_BASE_URL
+        value: https://brokerapi.pypsx.com
+      - key: KYC_ORG_API_KEY_ID
+        value: KYC_IONNYUQYPWYHWWSI
+      - key: KYC_ORG_API_SECRET_KEY
+        value: USZIMT3MBVUPO7RTWXWRDNOG34JJ5PL2OHW3E5Y
+      - key: NEXT_PUBLIC_DEMO_API_MOCK
+        value: "false"
+
+databases:
+  - name: wealth-fintech-db
+    plan: free

@@ -1,6 +1,6 @@
 const PYPSX_BASE_URL = process.env.PYPSX_BASE_URL || "https://brokerapi.pypsx.com";
-const PYPSX_KEY_ID = process.env.PYPSX_ORG_API_KEY_ID || "PYPSX-SANDBOX-PYPSXOFFICIA-5F04DF960030";
-const PYPSX_SECRET_KEY = process.env.PYPSX_ORG_API_SECRET_KEY || "7x_sO9PKa9jHpPCubHvDpltty3PWq0j8RcEpWX-tmws";
+const PYPSX_KEY_ID = process.env.PYPSX_ORG_API_KEY_ID || "PYPSX-SANDBOX-PYPSXOFFICIA-9B452FCA794F";
+const PYPSX_SECRET_KEY = process.env.PYPSX_ORG_API_SECRET_KEY || "YjtgSOYjpA0httBX5xSne6TVIu1XgYRabk1YvWVYAJI";
 
 export async function pypsxFetch<T = any>(
   endpoint: string,
@@ -132,38 +132,29 @@ export interface PyPsxFeeStructure {
   mode: string;
   currency: string;
   partner_id?: string;
+  fee_model?: string;
   rates: {
-    commission_default_pct: number;
-    commission_min_pct?: number;
-    commission_max_pct?: number;
-    clearance_fee_rate?: number;
+    commission_pct?: number;
+    commission_default_pct?: number;
+    advance_fee_rate?: number;
     sst_rate?: number;
-    nccpl_rate: number;
-    cdc_transaction_rate: number;
-    cdc_transaction_floor_pkr: number;
-    cdc_custody_annual_rate: number;
-    transactional_rate: number;
     cgt_filer_rate: number;
     cgt_non_filer_rate: number;
   };
-  applies: {
-    nccpl?: boolean;
-    cdc_transaction?: boolean;
-    transactional?: boolean;
-    cdc_custody?: boolean;
-    clearance?: boolean;
-    cgt: boolean;
+  sst?: {
+    rate: number;
+    rate_pct: number;
   };
-  cgt: {
+  advance_fee?: {
+    rate: number;
+    rate_pct: number;
+    covers?: string[];
+  };
+  cgt?: {
     filer_rate: number;
     non_filer_rate: number;
     note?: string;
   };
-  rates_editable?: {
-    scope: string;
-    note?: string;
-  };
-  units?: string;
 }
 
 export async function getPypsxConfig(): Promise<PyPsxConfig> {
@@ -175,13 +166,13 @@ export async function getPypsxConfig(): Promise<PyPsxConfig> {
       partner_id: "PYPSXOFFICIAL",
       api_key_id: PYPSX_KEY_ID,
       environment: "sandbox",
-      commission_rate: 0.35,
+      commission_rate: 0.34,
       commission_rate_source: "key",
-      default_portfolio_value: 260000,
+      default_portfolio_value: 340000,
       default_portfolio_value_source: "key",
       currency: "PKR",
       scopes: ["accounts:read", "accounts:write", "trading:read", "trading:write"],
-      config_version: "6687f9fe896c8777",
+      config_version: "b3a91ba4b90f1b64",
     };
   }
 }
@@ -195,21 +186,20 @@ export async function getPypsxFees(): Promise<PyPsxFeeStructure> {
       mode: "PAPER",
       currency: "PKR",
       rates: {
-        commission_default_pct: 0.15,
-        clearance_fee_rate: 0.0002,
+        commission_pct: 0.34,
+        advance_fee_rate: 0.0002,
         sst_rate: 0.13,
-        nccpl_rate: 0.00005,
-        cdc_transaction_rate: 0.000036,
-        cdc_transaction_floor_pkr: 5,
-        cdc_custody_annual_rate: 0.00005625,
-        transactional_rate: 0.00003,
         cgt_filer_rate: 0.15,
         cgt_non_filer_rate: 0.15,
       },
-      applies: {
-        clearance: true,
-        cdc_custody: true,
-        cgt: true,
+      advance_fee: {
+        rate: 0.0002,
+        rate_pct: 0.02,
+        covers: ["NCCPL", "CDC"],
+      },
+      sst: {
+        rate: 0.13,
+        rate_pct: 13,
       },
       cgt: {
         filer_rate: 0.15,
@@ -220,13 +210,13 @@ export async function getPypsxFees(): Promise<PyPsxFeeStructure> {
 }
 
 /**
- * Accurately calculate commission, regulatory fees, CGT, and net equity impact for an order
+ * Calculate commission, advance fees, SST, CGT, and net cash/equity impact
  */
 export function calculateOrderFinancials(params: {
   side: "BUY" | "SELL";
   quantity: number;
   price: number;
-  commissionRatePct?: number; // e.g., 0.35
+  commissionRatePct?: number; // e.g., 0.34%
   isFiler?: boolean;
   costBasisPerShare?: number;
 }) {
@@ -234,23 +224,21 @@ export function calculateOrderFinancials(params: {
     side,
     quantity,
     price,
-    commissionRatePct = 0.35,
+    commissionRatePct = 0.34,
     isFiler = true,
     costBasisPerShare = price,
   } = params;
 
   const notional = quantity * price;
-  const commissionRate = commissionRatePct / 100; // 0.0035
+  const commissionRate = commissionRatePct / 100; // 0.0034
   const commission = Math.round(notional * commissionRate * 100) / 100;
   
   // SST (Sindh Sales Tax) 13% on brokerage commission
   const sst = Math.round(commission * 0.13 * 100) / 100;
   
-  // Regulatory & clearance fees
-  const clearance = Math.round(notional * 0.0002 * 100) / 100;
-  const nccpl = Math.round(notional * 0.00005 * 100) / 100;
-  const cdc = Math.max(5, Math.round(notional * 0.000036 * 100) / 100);
-  const totalFees = Math.round((sst + clearance + nccpl + cdc) * 100) / 100;
+  // Advance Fee (0.02% covering NCCPL + CDC)
+  const advanceFee = Math.round(notional * 0.0002 * 100) / 100;
+  const totalFees = Math.round((sst + advanceFee) * 100) / 100;
 
   let cgt = 0;
   let realizedPnl = 0;
@@ -264,17 +252,15 @@ export function calculateOrderFinancials(params: {
   }
 
   const totalDeductions = commission + totalFees + cgt;
-  const totalBuyCost = notional + commission + totalFees;
-  const netSellProceeds = notional - commission - totalFees - cgt;
+  const totalBuyCost = notional + commission + sst + advanceFee;
+  const netSellProceeds = notional - commission - sst - advanceFee - cgt;
 
   return {
     notional,
     commission,
     commissionRatePct,
     sst,
-    clearance,
-    nccpl,
-    cdc,
+    advanceFee,
     totalFees,
     cgt,
     realizedPnl,
