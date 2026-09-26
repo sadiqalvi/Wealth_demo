@@ -58,7 +58,7 @@ export const PAKISTANI_BANKS: Record<string, { name: string; type: string; color
   NBPA: { name: "National Bank of Pakistan (NBP)", type: "State Commercial", color: "text-green-400" },
 };
 
-const STORAGE_PORTAL_VERIFIED_KEY = "wealthdemo_kyc_portal_verified";
+const STORAGE_PORTAL_VERIFIED_PREFIX = "wealthdemo_kyc_portal_verified_";
 
 
 export function formatCgpErrorMessage(rawError: string, context?: "mobile" | "email" | "iban", ownerType?: string): string {
@@ -98,12 +98,12 @@ export function formatCgpErrorMessage(rawError: string, context?: "mobile" | "em
 export function StepIdentity({ application, password, onUpdateStep, onNext, loading, onDraftUpdate }: StepIdentityProps) {
   const [identity, setIdentity] = useState<IdentityData>({
     ...(application.identity || {}),
-    email: application.identity?.email || "applicant@example.com",
-    mobile: application.identity?.mobile || "03062486537",
+    email: application.identity?.email || "",
+    mobile: application.identity?.mobile || "",
     mobile_owner_type: application.identity?.mobile_owner_type || "Self",
-    iban: application.identity?.iban || "PK32MEZN0001310107513652",
+    iban: application.identity?.iban || "",
     bank_name: application.identity?.bank_name || (application.identity?.iban?.includes("MEZN") ? "Meezan Bank Limited" : application.identity?.iban ? "Habib Bank Limited (HBL)" : undefined),
-    account_title: application.identity?.account_title || application.personal?.full_name || "VALUED APPLICANT",
+    account_title: application.identity?.account_title || application.personal?.full_name || "",
   });
 
   // Mobile Ownership Additional Details
@@ -125,20 +125,20 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
   }>(() => {
     try {
       if (typeof window !== "undefined") {
-        const stored = localStorage.getItem(STORAGE_PORTAL_VERIFIED_KEY);
+        const stored = localStorage.getItem(STORAGE_PORTAL_VERIFIED_PREFIX + (application?.id || "default"));
         if (stored) return JSON.parse(stored);
       }
     } catch {}
     return {
-      email: application.identity?.email_verified ? application.identity?.email : "sadiq.alvi.89@gmail.com",
-      email_verified: application.identity?.email_verified ?? true,
-      mobile: application.identity?.mobile_verified ? application.identity?.mobile : "03062486537",
-      mobile_verified: application.identity?.mobile_verified ?? true,
+      email: application.identity?.email || "",
+      email_verified: Boolean(application.identity?.email_verified),
+      mobile: application.identity?.mobile || "",
+      mobile_verified: Boolean(application.identity?.mobile_verified),
       mobile_owner_type: application.identity?.mobile_owner_type || "Self",
-      iban: application.identity?.iban_verified ? application.identity?.iban : (application.identity?.iban || "PK32MEZN0001310107513652"),
-      iban_verified: application.identity?.iban_verified ?? true,
-      bank_name: application.identity?.bank_name || "Meezan Bank Limited",
-      account_title: application.identity?.account_title || application.personal?.full_name || "AHMED YOUSAF ELVI",
+      iban: application.identity?.iban || "",
+      iban_verified: Boolean(application.identity?.iban_verified),
+      bank_name: application.identity?.bank_name,
+      account_title: application.identity?.account_title || application.personal?.full_name || "",
     };
   });
 
@@ -248,7 +248,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
               iban_verified: res.iban !== undefined ? !!res.iban : prev.iban_verified,
             };
             try {
-              localStorage.setItem(STORAGE_PORTAL_VERIFIED_KEY, JSON.stringify(next));
+              localStorage.setItem(STORAGE_PORTAL_VERIFIED_PREFIX + (application?.id || "default"), JSON.stringify(next));
             } catch {}
             return next;
           });
@@ -368,7 +368,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
       setPortalVerified((prev) => {
         const next = { ...prev, email: identity.email, email_verified: true };
         try {
-          localStorage.setItem(STORAGE_PORTAL_VERIFIED_KEY, JSON.stringify(next));
+          localStorage.setItem(STORAGE_PORTAL_VERIFIED_PREFIX + (application?.id || "default"), JSON.stringify(next));
         } catch {}
         return next;
       });
@@ -467,7 +467,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
           mobile_owner_type: identity.mobile_owner_type,
         };
         try {
-          localStorage.setItem(STORAGE_PORTAL_VERIFIED_KEY, JSON.stringify(next));
+          localStorage.setItem(STORAGE_PORTAL_VERIFIED_PREFIX + (application?.id || "default"), JSON.stringify(next));
         } catch {}
         return next;
       });
@@ -507,7 +507,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
     try {
       const res = await onUpdateStep("identity", { password, sub_step: "iban_verify", iban: cleanIban });
       const finalBank = res?.bank_name || resolvedBankName;
-      const finalTitle = res?.account_title || application.personal.full_name || "VALUED APPLICANT";
+      const finalTitle = res?.account_title || application.personal?.full_name || "";
       setIdentity((prev) => {
         const next = {
           ...prev,
@@ -528,7 +528,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
           account_title: finalTitle,
         };
         try {
-          localStorage.setItem(STORAGE_PORTAL_VERIFIED_KEY, JSON.stringify(next));
+          localStorage.setItem(STORAGE_PORTAL_VERIFIED_PREFIX + (application?.id || "default"), JSON.stringify(next));
         } catch {}
         return next;
       });
@@ -1306,11 +1306,11 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
           <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2 text-xs">
             <div className="flex justify-between">
               <span className="text-slate-400">Resolved Bank:</span>
-              <span className="text-white font-bold">{identity.bank_name || "Meezan Bank Limited"}</span>
+              <span className="text-white font-bold">{identity.bank_name || "—"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Account Title:</span>
-              <span className="text-white font-bold">{identity.account_title || application.personal.full_name || "AHMED YOUSAF ELVI"}</span>
+              <span className="text-white font-bold">{identity.account_title || application.personal?.full_name || "—"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Pakistani IBAN:</span>
@@ -1497,7 +1497,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
                       />
                     </div>
                     <span className="font-mono text-xs text-white font-bold break-all">
-                      {portalVerified.email || "sadiq.alvi.89@gmail.com"}
+                      {portalVerified.email || "—"}
                     </span>
                     <span className="text-[10px] text-slate-400">Keeps active verified status</span>
                   </label>
@@ -1524,7 +1524,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
                       />
                     </div>
                     <span className="font-mono text-xs text-white font-bold break-all">
-                      {identity.email || "applicant@example.com"}
+                      {identity.email || "—"}
                     </span>
                     <span className="text-[10px] text-slate-400">Will require fresh OTP verification</span>
                   </label>
@@ -1563,7 +1563,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
                       />
                     </div>
                     <span className="font-mono text-xs text-white font-bold">
-                      {portalVerified.mobile || "03062486537"}
+                      {portalVerified.mobile || "—"}
                     </span>
                     <span className="text-[10px] text-slate-400">PTA SIM verified (Self)</span>
                   </label>
@@ -1590,7 +1590,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
                       />
                     </div>
                     <span className="font-mono text-xs text-white font-bold">
-                      {identity.mobile || "03XXXXXXXXX"} ({identity.mobile_owner_type})
+                      {identity.mobile || "—"} ({identity.mobile_owner_type || "Self"})
                     </span>
                     <span className="text-[10px] text-slate-400">Will require fresh SMS OTP</span>
                   </label>
@@ -1629,9 +1629,9 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
                       />
                     </div>
                     <span className="font-mono text-xs text-white font-bold truncate">
-                      {portalVerified.iban || "PK32MEZN0001310107513652"}
+                      {portalVerified.iban || "—"}
                     </span>
-                    <span className="text-[10px] text-slate-400">{portalVerified.bank_name || "Meezan Bank Limited"}</span>
+                    <span className="text-[10px] text-slate-400">{portalVerified.bank_name || "—"}</span>
                   </label>
 
                   {/* Option B: Unverified Form Input */}
@@ -1656,7 +1656,7 @@ export function StepIdentity({ application, password, onUpdateStep, onNext, load
                       />
                     </div>
                     <span className="font-mono text-xs text-white font-bold truncate">
-                      {identity.iban || "PK..."}
+                      {identity.iban || "—"}
                     </span>
                     <span className="text-[10px] text-slate-400">Will require 1-Link resolution</span>
                   </label>

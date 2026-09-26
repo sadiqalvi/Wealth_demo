@@ -81,28 +81,7 @@ export function StepPersonal({ application, password, onUpdateStep, onNext, onBa
         });
       }
     } catch {
-      // Fallback to local default prefill
-      setPersonal((prev) => ({
-        ...prev,
-        salutation: "MR",
-        full_name: "AHMED YOUSAF ELVI",
-        father_husband_relationship: "FATHER",
-        father_husband_name: "AHMED AZEEM ELVI",
-        cnic_doc_type: "smartid",
-        country_of_birth: "PAK",
-        date_of_birth: "1989-01-01",
-        gender: "M",
-        marital_status: "1",
-        place_of_birth: "KARACHI",
-      }));
-      setAddress((prev) => ({
-        ...prev,
-        permanent_address: "HOUSE F 79 NORTH NAZIMABAD",
-        permanent_city: "KARACHI",
-        permanent_country: "PAK",
-        resident_status: "7",
-        mailing_differs: false,
-      }));
+      // Gracefully retain existing application values without overriding with mock data
     }
   };
 

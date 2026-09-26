@@ -13,7 +13,7 @@ interface StepDeclarationProps {
 
 export function StepDeclaration({ application, password, onUpdateStep, onBack, loading, onDraftUpdate }: StepDeclarationProps) {
   const [applicantName, setApplicantName] = useState(
-    application.personal.full_name || "AHMED YOUSAF ELVI"
+    application.personal?.full_name || ""
   );
   const [docsConfirmed, setDocsConfirmed] = useState(true);
   const [termsAccepted, setTermsAccepted] = useState(true);

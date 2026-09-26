@@ -751,6 +751,10 @@ export function KycOnboardingView() {
     localStorage.removeItem(STORAGE_STEP_KEY);
     localStorage.removeItem(STORAGE_PWD_KEY);
     localStorage.removeItem(STORAGE_PORTAL_VERIFIED_KEY);
+    localStorage.removeItem("wealthdemo_kyc_portal_verified");
+    if (application?.id) {
+      localStorage.removeItem(`wealthdemo_kyc_portal_verified_${application.id}`);
+    }
   };
 
   // Stepper navigation
